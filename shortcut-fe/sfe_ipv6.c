@@ -3021,6 +3021,19 @@ static ssize_t sfe_ipv6_get_debug_dev(struct device *dev,
 }
 
 /*
+ * reset  sfe aggr parametes
+ *
+ */
+static void reset_sfe_aggr_param(sfe_wlan_index_type index)
+{
+	kfree_skb_list(aggr_params[index].skb_head);
+	/* Reset the params. */
+	aggr_params[index].curr_dl_skb_num = 0;
+	aggr_params[index].skb_head = NULL;
+	aggr_params[index].skb_tail = NULL;
+}
+
+/*
  * sfe_ipv6_destroy_all_rules_for_dev()
  *	Destroy all connections that match a particular device.
  *
@@ -3054,6 +3067,36 @@ another_round:
 	if (c) {
 		sfe_ipv6_flush_connection(si, c, SFE_SYNC_REASON_DESTROY);
 		goto another_round;
+	}
+	if (!dev)
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX0].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX0);
+		}
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX1].sfe_timer))== 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX1);
+		}
+	}
+	else if (strncmp(dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0)
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX0].sfe_timer)) == 1)
+		{
+		  reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX0);
+		}
+	}
+	else if (strncmp(dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 )
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX1].sfe_timer)) == 1)
+		{
+		  reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX1);
+		}
+
 	}
 }
 
