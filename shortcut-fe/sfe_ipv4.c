@@ -1366,7 +1366,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 * If our packet is larger than the MTU of the transmit interface then
 	 * we allow if the iface is rmnet_data, else don't allow
 	 */
-	if (unlikely((len > cm->xmit_dev_mtu) && !skb_is_gso(skb))) {
+	if (unlikely(len > cm->xmit_dev_mtu)) {
 		if ((strncmp(cm->xmit_dev->name, si->ipv4_iface,
 			strlen(si->ipv4_iface) - 1) != 0) ||
 			!skip_mtu_check) {
