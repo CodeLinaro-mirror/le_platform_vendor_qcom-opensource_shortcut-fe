@@ -34,6 +34,7 @@ struct sfe_wlan_aggr_params aggr_params[MAX_WLAN_INDEX];
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
 int aggr_on = AGGR_ON;
+int skip_mtu_check = 1;
 int threshold_count;
 int timeout_count;
 
@@ -61,6 +62,7 @@ static struct ctl_table sfe_sysctl_debug[] =
     XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "aggr_on", &aggr_on),
     XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold_count", &threshold_count),
     XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "timeout_count", &timeout_count),
+    XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "skip_mtu_check", &skip_mtu_check),
     {0, },
 };
 
@@ -1365,18 +1367,22 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 
 	/*
 	 * If our packet is larger than the MTU of the transmit interface then
-	 * we can't forward it easily.
+	 * we allow if the iface is rmnet_data, else don't allow
 	 */
 	if (unlikely(len > cm->xmit_dev_mtu)) {
-		struct sfe_ipv4_connection *c = cm->connection;
-		sfe_ipv4_remove_sfe_ipv4_connection(si, c);
-		si->exception_events[SFE_IPV4_EXCEPTION_EVENT_UDP_NEEDS_FRAGMENTATION]++;
-		si->packets_not_forwarded++;
-		spin_unlock_bh(&si->lock);
+		if ((strncmp(cm->xmit_dev->name, si->ipv4_iface,
+			strlen(si->ipv4_iface) - 1) != 0) ||
+			!skip_mtu_check) {
+			struct sfe_ipv4_connection *c = cm->connection;
+			sfe_ipv4_remove_sfe_ipv4_connection(si, c);
+			si->exception_events[SFE_IPV4_EXCEPTION_EVENT_UDP_NEEDS_FRAGMENTATION]++;
+			si->packets_not_forwarded++;
+			spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("larger than mtu\n");
-		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
-		return 0;
+			DEBUG_TRACE("larger than mtu\n");
+			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
+			return 0;
+		}
 	}
 
 	/*
@@ -1809,18 +1815,22 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 
 	/*
 	 * If our packet is larger than the MTU of the transmit interface then
-	 * we can't forward it easily.
+	 * we allow if the iface is rmnet_data, else don't allow
 	 */
 	if (unlikely((len > cm->xmit_dev_mtu) && !skb_is_gso(skb))) {
-		struct sfe_ipv4_connection *c = cm->connection;
-		sfe_ipv4_remove_sfe_ipv4_connection(si, c);
-		si->exception_events[SFE_IPV4_EXCEPTION_EVENT_TCP_NEEDS_FRAGMENTATION]++;
-		si->packets_not_forwarded++;
-		spin_unlock_bh(&si->lock);
+		if ((strncmp(cm->xmit_dev->name, si->ipv4_iface,
+			strlen(si->ipv4_iface) - 1) != 0) ||
+			!skip_mtu_check) {
+			struct sfe_ipv4_connection *c = cm->connection;
+			sfe_ipv4_remove_sfe_ipv4_connection(si, c);
+			si->exception_events[SFE_IPV4_EXCEPTION_EVENT_TCP_NEEDS_FRAGMENTATION]++;
+			si->packets_not_forwarded++;
+			spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("larger than mtu\n");
-		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
-		return 0;
+			DEBUG_TRACE("larger than mtu\n");
+			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
+			return 0;
+		}
 	}
 
 	/*
