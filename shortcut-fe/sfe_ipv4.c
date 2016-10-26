@@ -55,7 +55,7 @@ XDBG_TIMER_NUM_DBG,
 XDBG_MAX
 };
 
-static struct ctl_table sfe_sysctl_debug[] = 
+static struct ctl_table sfe_sysctl_debug[] =
 {
     XDBG_ADD_PROC_ENTRY(XDBG_TIMER_STEP_DBG, "timeout_value", &var_timeout),
     XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold", &var_thresh),
@@ -301,6 +301,7 @@ struct sfe_ipv4_connection_match {
 	bool do_aggr;                   /* Aggregation is needed */
 	sfe_wlan_index_type index;      /* WLAN Interface index. */
 	bool expand_head;               /* Extra headroom needed */
+	bool pad_removal_require;       /* Padding removal required */
 };
 
 /*
@@ -1578,7 +1579,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			return 1;
 		}
 		else
-		{ 
+		{
 			/* skb head is null for the first packet*/
 			if(aggr_params[cm->index].skb_head == NULL)
 			{
@@ -1599,6 +1600,14 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	else
 	{
 		pr_debug("\nUDP_v4-Uplink. No Aggregation.");
+		/*
+		* Remove padding if require
+		*/
+		if (cm->pad_removal_require) {
+			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len))) {
+				DEBUG_TRACE ("\n padding removal failed\n");
+			}
+		}
 		dev_queue_xmit(skb);
 		return 1;
 	}
@@ -2216,6 +2225,15 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	else
 	{
 		pr_debug("\nTCP_v4-UPLINK. No Aggregation. ");
+
+		/*
+		* Remove padding if require
+		*/
+		if (cm->pad_removal_require) {
+			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len))) {
+				DEBUG_TRACE ("\n padding removal failed\n");
+			}
+		}
 		dev_queue_xmit(skb);
 		return 1;
 	}
@@ -2714,6 +2732,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	original_cm->connection = c;
 	original_cm->counter_match = reply_cm;
 	original_cm->flags = 0;
+	original_cm->pad_removal_require = false;
 #ifdef CONFIG_NF_FLOW_COOKIE
 	original_cm->flow_cookie = 0;
 #endif
@@ -2766,6 +2785,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	reply_cm->connection = c;
 	reply_cm->counter_match = original_cm;
 	reply_cm->flags = 0;
+	reply_cm->pad_removal_require = false;
 #ifdef CONFIG_NF_FLOW_COOKIE
 	reply_cm->flow_cookie = 0;
 #endif
@@ -2842,7 +2862,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	}
 
 	/* If the packet destination is wlan0 or wlan1, do aggregation*/
-	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0)) 
+	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0))
 	{
 		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX0;
@@ -2874,6 +2894,24 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+	}
+
+	/*
+	.*  Check for padding removal required
+	 *  If packet coming from eth interface then padding removal required
+	*/
+
+	/*Uplink case*/
+	if ((strncmp(src_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
+	{
+		original_cm->pad_removal_require = true;
+		reply_cm->pad_removal_require= false;
+	}
+	/*Downlink case*/
+	else if ((strncmp(dest_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
+	{
+		original_cm->pad_removal_require = false;
+		reply_cm->pad_removal_require= true;
 	}
 
 	/*
@@ -3735,7 +3773,7 @@ static int __init sfe_ipv4_init(void)
 	proc_create("ipv4_iface_name",0,NULL,&ipv4_iface_proc_fops);
 	memset(si->ipv4_iface,0,MAX_INTF_LEN);
 	si->iface_length=strlen(si->ipv4_iface);
-		
+
 	memset(aggr_params, 0, sizeof(aggr_params));
 
 	/*
