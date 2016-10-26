@@ -325,6 +325,7 @@ struct sfe_ipv6_connection_match {
 	bool do_aggr;                   /* Aggregation is needed */
 	sfe_wlan_index_type index;      /* WLAN Interface index. */
 	bool expand_head;               /* Extra headroom needed */
+	bool pad_removal_require;
 };
 
 /*
@@ -1332,6 +1333,7 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	struct sk_buff *new_skb,*temp ;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
+	unsigned int skb_trim_len;
         struct sfe_ipv6_connection *c;
 
 	/*
@@ -1635,6 +1637,12 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	else
 	{
 		pr_debug("\nUDP_v6-Uplink. No Aggregation. ");
+		if (cm->pad_removal_require) {
+			skb_trim_len=ntohs(iph->payload_len)+sizeof(struct sfe_ipv6_ip_hdr);
+			if (pskb_trim_rcsum(skb, skb_trim_len)) {
+				DEBUG_TRACE ("\n padding removal failed\n");
+			}
+		}
 		dev_queue_xmit(skb);
 		return 1;
 	}
@@ -2231,6 +2239,11 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	else
 	{
 		pr_debug("\nTCP_v6-UpLink. No Aggregation. ");
+		if (cm->pad_removal_require) {
+			if (pskb_trim_rcsum(skb, ntohs(iph->payload_len)+sizeof(struct sfe_ipv6_ip_hdr))) {
+				DEBUG_TRACE ("\n padding removal failed\n");
+			}
+		}
 		dev_queue_xmit(skb);
 		return 1;
 	}
@@ -2738,6 +2751,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	original_cm->connection = c;
 	original_cm->counter_match = reply_cm;
 	original_cm->flags = 0;
+	original_cm->pad_removal_require = false;
 #ifdef CONFIG_NF_FLOW_COOKIE
 	original_cm->flow_cookie = 0;
 #endif
@@ -2790,6 +2804,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	reply_cm->connection = c;
 	reply_cm->counter_match = original_cm;
 	reply_cm->flags = 0;
+	reply_cm->pad_removal_require = false;
 #ifdef CONFIG_NF_FLOW_COOKIE
 	reply_cm->flow_cookie = 0;
 #endif
@@ -2899,7 +2914,16 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
-
+	if ((strncmp(src_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
+	{
+		original_cm->pad_removal_require = true;
+		reply_cm->pad_removal_require= false;
+	}
+	else if ((strncmp(dest_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
+	{
+		original_cm->pad_removal_require = false;
+		reply_cm->pad_removal_require= true;
+	}
 	/*
 	 * Take hold of our source and dest devices for the duration of the connection.
 	 */
