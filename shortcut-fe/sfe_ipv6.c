@@ -1748,6 +1748,8 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	const struct net_device_ops *ops;
 	int queue_index = 0;
         struct sfe_ipv6_connection *c;
+	uint32_t data_offs;
+	bool close_aggr = false;
 
 	/*
 	 * Is our packet too short to contain a valid UDP header?
@@ -2177,12 +2179,13 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	if ( cm->do_aggr)
 	{
 		pr_debug("\nTCP_v6-Downlink");
-
+		/*set the close_aggr parameters for acknowledgements*/
+		data_offs = tcph->doff << 2;
+		close_aggr = ((len-ihl-data_offs) == 0 ) ? true: false;
 		/*
 		 * Mark that this packet has been fast forwarded.
 		 */
 		skb->fast_forwarded = 1;
-
 		/*DownLink: skb pkt aggregation*/
 		new_skb=skb;
 		new_skb->next =NULL;
@@ -2194,8 +2197,8 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 									NULL);
 		skb_set_queue_mapping(skb, queue_index);
 
-		/* Check if the Threshold is reached*/
-		if (aggr_params[cm->index].curr_dl_skb_num == var_thresh- 1)
+		/* Check if the Threshold is reached or the next packet is ack packet*/
+		if ((aggr_params[cm->index].curr_dl_skb_num == var_thresh- 1) || close_aggr)
 		{
 			if (aggr_params[cm->index].skb_tail)
 			{
@@ -2762,6 +2765,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	original_cm->active_prev = NULL;
 	original_cm->active = false;
 	original_cm->expand_head = true;
+	original_cm->do_aggr = false;
 
 	/*
 	 * For PPP links we don't write an L2 header.  For everything else we do.
@@ -2815,7 +2819,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	reply_cm->active_prev = NULL;
 	reply_cm->active = false;
 	reply_cm->expand_head = true;
-
+	reply_cm->do_aggr = false;
 	/*
 	 * For PPP links we don't write an L2 header.  For everything else we do.
 	 */
@@ -2880,16 +2884,20 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 		reply_cm->addEthMAC = false;
 		original_cm->addEthMAC = false;
 	}
-
+	/* Skip headroom in case dest is wlan0 or wlan1*/
+	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0) ||
+			(strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
+	{
+		/* For LAN-LAN communication make sure enough headroom is available. */
+		original_cm->expand_head = false;
+		reply_cm->expand_head = false;
+	}
 	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0)) 
 	{
 		original_cm->do_aggr = true;
 		original_cm->index = SFE_WLAN_LINK_INDEX0;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		/* For LAN-LAN communication make sure enough headroom is available. */
-		original_cm->expand_head = false;
-		reply_cm->expand_head = false;
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
 	{
@@ -2897,9 +2905,21 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 		original_cm->index = SFE_WLAN_LINK_INDEX1;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		/* For LAN-LAN communication make sure enough headroom is available. */
-		original_cm->expand_head = false;
-		reply_cm->expand_head = false;
+	}
+	/* Exactly opposite in case when wlan device is src, reply packets are aggregated */
+	else if((strncmp(src_dev->name, WLAN_INTF1,WLAN_INTF_LEN) == 0 ))
+	{
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = true;
+		reply_cm->index = SFE_WLAN_LINK_INDEX0;
+	}
+	else if ((strncmp(src_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
+	{
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = true;
+		reply_cm->index = SFE_WLAN_LINK_INDEX1;
 	}
 	else if ((strncmp(dest_dev->name, ECM_INTF, ECM_INTF_LEN)  == 0 ))
 	{
