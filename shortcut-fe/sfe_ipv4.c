@@ -1714,7 +1714,10 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	int k;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
-        struct sfe_ipv4_connection *c;
+	struct sfe_ipv4_connection *c;
+	uint32_t data_offs;
+	bool close_aggr = false;
+
 
 	/*
 	 * Is our packet too short to contain a valid UDP header?
@@ -2160,9 +2163,16 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	/*
 	 * do _aggr is set to true in case we need aggregation to happen
 	 */
+	pr_debug("\nAggregation Parameter value: %d",cm->do_aggr);
 	if ( cm->do_aggr)
 	{
 		pr_debug("\nTCP_v4-Dowlink");
+		/*
+		* Check that our TCP data offset isn't too short
+		*/
+		data_offs = tcph->doff << 2;
+		close_aggr = ((len - sizeof(struct sfe_ipv4_ip_hdr) - data_offs) == 0) ? true : false;
+		pr_debug("\nclose_aggr variable value: %d",close_aggr);
 
 		/*
 		 * Mark that this packet has been fast forwarded.
@@ -2179,8 +2189,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 							    NULL);
 		skb_set_queue_mapping(skb, queue_index);
 
-		/* Check if the Threshold is reached*/
-		if (aggr_params[cm->index].curr_dl_skb_num == (var_thresh- 1))
+		/* Check if the Threshold is reached  or the next packet is TCP Ack.*/
+		if ((aggr_params[cm->index].curr_dl_skb_num == (var_thresh- 1)) || close_aggr)
 		{
 			if (aggr_params[cm->index].skb_tail)
 			{
@@ -2190,7 +2200,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 
 			threshold_count++;
 
-			pr_debug("\nPacket in List: %d ",aggr_params[cm->index].curr_dl_skb_num);
+			pr_debug("\nTotal Packet in List: %d ",aggr_params[cm->index].curr_dl_skb_num);
 			if(aggr_params[cm->index].skb_head)
 				dev_queue_xmit_list(aggr_params[cm->index].skb_head);
 			else
@@ -2218,6 +2228,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
 			}
 			aggr_params[cm->index].curr_dl_skb_num ++;
+
+			pr_debug("\nQueing packets in the list",cm->do_aggr);
 
 			return 1;
 		}
@@ -2742,6 +2754,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	original_cm->active_next = NULL;
 	original_cm->active_prev = NULL;
 	original_cm->expand_head = true;
+	original_cm->do_aggr = false;
 	original_cm->active = false;
 
 	/*
@@ -2795,6 +2808,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	reply_cm->active_next = NULL;
 	reply_cm->active_prev = NULL;
 	reply_cm->expand_head = true;
+	reply_cm->do_aggr = false;
 	reply_cm->active = false;
 
 	/*
@@ -2861,16 +2875,24 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		original_cm->addEthMAC = false;
 	}
 
-	/* If the packet destination is wlan0 or wlan1, do aggregation*/
+	/* Skip headroom in case dest is wlan0 or wlan1 or wlan2 or wlan 3*/
+	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0) ||
+		(strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ) ||
+		(strncmp(dest_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 ) ||
+		(strncmp(dest_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
+	{
+		/* For LAN-LAN communication make sure enough headroom is available. */
+		original_cm->expand_head = false;
+		reply_cm->expand_head = false;
+	}
+
+	/* If the packet destination is wlan0 or wlan1 or wlan2 or wlan3, do aggregation*/
 	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0))
 	{
 		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX0;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		/* For LAN-LAN communication make sure enough headroom is available. */
-		original_cm->expand_head = false;
-		reply_cm->expand_head = false;
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
 	{
@@ -2878,15 +2900,55 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		original_cm->index = SFE_WLAN_LINK_INDEX1;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		/* For LAN-LAN communication make sure enough headroom is available. */
-		original_cm->expand_head = false;
-		reply_cm->expand_head = false;
 	}
-	else if ((strncmp(dest_dev->name, ECM_INTF, ECM_INTF_LEN)  == 0 ))
+	else if ((strncmp(dest_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0))
 	{
-		/* Align the packets before giving to USB driver. */
-		original_cm->expand_head = true;
-		reply_cm->expand_head = true;
+		original_cm->do_aggr = aggr_on;
+		original_cm->index = SFE_WLAN_LINK_INDEX2;
+		reply_cm->do_aggr = false;
+		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+	}
+	else if ((strncmp(dest_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
+	{
+		original_cm->do_aggr = aggr_on;
+		original_cm->index = SFE_WLAN_LINK_INDEX3;
+		reply_cm->do_aggr = false;
+		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+	}
+
+	/* If the packet source is wlan0 or wlan1 or wlan2 or wlan3, do aggregation in reverse direction
+		Aggreagtion is enabled for the reply packet.*/
+	else if ((strncmp(src_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0))
+	{
+		pr_debug("\nSource Device is WLAN0 !!!");
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = aggr_on;
+		reply_cm->index = SFE_WLAN_LINK_INDEX0;
+	}
+	else if ((strncmp(src_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
+	{
+		pr_debug("\nSource Device is WLAN1 !!!");
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = aggr_on;
+		reply_cm->index = SFE_WLAN_LINK_INDEX1;
+	}
+	else if ((strncmp(src_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 ))
+	{
+		pr_debug("\nSource Device is WLAN2 !!!");
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = aggr_on;
+		reply_cm->index = SFE_WLAN_LINK_INDEX2;
+	}
+	else if ((strncmp(src_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
+	{
+		pr_debug("\nSource Device is WLAN3 !!!");
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = aggr_on;
+		reply_cm->index = SFE_WLAN_LINK_INDEX3;
 	}
 	else
 	{
@@ -3041,6 +3103,19 @@ static const struct device_attribute sfe_ipv4_debug_dev_attr =
 	__ATTR(debug_dev, 0664, sfe_ipv4_get_debug_dev, NULL);
 
 /*
+ * reset  sfe aggr parametes
+ *
+ */
+static void reset_sfe_aggr_param(sfe_wlan_index_type index)
+{
+	kfree_skb_list(aggr_params[index].skb_head);
+	/* Reset the params. */
+	aggr_params[index].curr_dl_skb_num = 0;
+	aggr_params[index].skb_head = NULL;
+	aggr_params[index].skb_tail = NULL;
+}
+
+/*
  * sfe_ipv4_destroy_all_rules_for_dev()
  *	Destroy all connections that match a particular device.
  *
@@ -3074,6 +3149,66 @@ another_round:
 	if (c) {
 		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_DESTROY);
 		goto another_round;
+	}
+
+	if (!dev)
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX0].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX0);
+		}
+
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX1].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX1);
+		}
+
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX2].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX2);
+		}
+
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX3].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX3);
+		}
+	}
+
+	else if (strncmp(dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0)
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX0].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX0);
+		}
+	}
+	else if (strncmp(dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 )
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX1].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX1);
+		}
+	}
+	else if (strncmp(dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 )
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX2].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX2);
+		}
+	}
+	else if (strncmp(dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 )
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX3].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX3);
+		}
 	}
 }
 
