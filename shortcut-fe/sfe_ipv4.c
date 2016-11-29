@@ -2873,7 +2873,9 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 
 	/* Skip headroom in case dest is wlan0 or wlan1*/
 	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0) ||
-		(strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
+		(strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ) ||
+		(strncmp(dest_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 ) ||
+		(strncmp(dest_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
 	{
 		/* For LAN-LAN communication make sure enough headroom is available. */
 		original_cm->expand_head = false;
@@ -2896,8 +2898,24 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
+	/* If the packet destination is wlan2 or wlan3, do aggregation*/
+	else if ((strncmp(dest_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0))
+	{
+		original_cm->do_aggr = true;
+		original_cm->index = SFE_WLAN_LINK_INDEX2;
+		reply_cm->do_aggr = false;
+		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+	}
+	else if ((strncmp(dest_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
+	{
+		original_cm->do_aggr = true;
+		original_cm->index = SFE_WLAN_LINK_INDEX3;
+		reply_cm->do_aggr = false;
+		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+	}
+
 	/* If the packet source is wlan0 or wlan1, do aggregation in reverse direction
-	    Aggreagtion is enabled for the reply packet.*/
+		Aggreagtion is enabled for the reply packet.*/
 	else if ((strncmp(src_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0))
 	{
 		pr_debug("\nSource Device is WLAN0 !!!");
@@ -2913,6 +2931,22 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 		reply_cm->do_aggr = true;
 		reply_cm->index = SFE_WLAN_LINK_INDEX1;
+	}
+	else if ((strncmp(src_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 ))
+	{
+		pr_debug("\nSource Device is WLAN2 !!!");
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = true;
+		reply_cm->index = SFE_WLAN_LINK_INDEX2;
+	}
+	else if ((strncmp(src_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
+	{
+		pr_debug("\nSource Device is WLAN3 !!!");
+		original_cm->do_aggr = false;
+		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
+		reply_cm->do_aggr = true;
+		reply_cm->index = SFE_WLAN_LINK_INDEX3;
 	}
 	else
 	{
@@ -3128,6 +3162,18 @@ another_round:
 		{
 			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX1);
 		}
+
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX2].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX2);
+		}
+
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX3].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX3);
+		}
 	}
 
 	else if (strncmp(dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0)
@@ -3144,6 +3190,22 @@ another_round:
 		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX1].sfe_timer)) == 1)
 		{
 			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX1);
+		}
+	}
+	else if (strncmp(dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 )
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX2].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX2);
+		}
+	}
+	else if (strncmp(dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 )
+	{
+		//if timer got deleted
+		if ((del_timer(&aggr_params[SFE_WLAN_LINK_INDEX3].sfe_timer)) == 1)
+		{
+			reset_sfe_aggr_param(SFE_WLAN_LINK_INDEX3);
 		}
 	}
 }
