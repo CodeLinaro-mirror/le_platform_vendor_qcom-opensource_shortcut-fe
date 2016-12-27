@@ -35,9 +35,10 @@
 
 #define WLAN_INTF1 "wlan0"
 #define WLAN_INTF2 "wlan1"
+#define WLAN_INTF3 "wlan2"
+#define WLAN_INTF4 "wlan3"
 #define ECM_INTF "ecm0"
 #define ETH_INTF "eth0"
-
 
 #ifndef SFE_SUPPORT_IPV6
 #define SFE_SUPPORT_IPV6

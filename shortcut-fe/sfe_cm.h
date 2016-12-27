@@ -39,12 +39,14 @@ typedef union {
 	struct sfe_ipv6_addr	ip6[1];
 } sfe_ip_addr_t;
 
-#define MAX_WLAN_INDEX 2
+#define MAX_WLAN_INDEX 4
 typedef enum
 {
 	SFE_WLAN_LINK_INDEX_NONE = -1,
 	SFE_WLAN_LINK_INDEX0 = 0,
-	SFE_WLAN_LINK_INDEX1 = 1
+	SFE_WLAN_LINK_INDEX1 = 1,
+	SFE_WLAN_LINK_INDEX2 = 2,
+	SFE_WLAN_LINK_INDEX3 = 3
 }sfe_wlan_index_type;
 
 /* 
