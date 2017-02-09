@@ -1333,10 +1333,11 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	__be16 dest_port;
 	struct sfe_ipv6_connection_match *cm;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb,*temp ;
+	struct sk_buff *new_skb;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
 	unsigned int skb_trim_len;
+	struct sfe_ipv6_eth_hdr *eth;
         struct sfe_ipv6_connection *c;
 
 	/*
@@ -1537,7 +1538,7 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 					pskb_expand_head(skb, ETH_HLEN, 0,
 							 GFP_ATOMIC);
 
-				struct sfe_ipv6_eth_hdr *eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
+				eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IPV6);
 				eth->h_dest[0] = cm->xmit_dest_mac[0];
 				eth->h_dest[1] = cm->xmit_dest_mac[1];
@@ -1750,6 +1751,7 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	struct sk_buff *new_skb ;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
+	struct sfe_ipv6_eth_hdr *eth;
         struct sfe_ipv6_connection *c;
 
 	/*
@@ -2139,7 +2141,7 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 					pskb_expand_head(skb, ETH_HLEN, 0,
 							 GFP_ATOMIC);
 
-				struct sfe_ipv6_eth_hdr *eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
+				eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IPV6);
 				eth->h_dest[0] = cm->xmit_dest_mac[0];
 				eth->h_dest[1] = cm->xmit_dest_mac[1];

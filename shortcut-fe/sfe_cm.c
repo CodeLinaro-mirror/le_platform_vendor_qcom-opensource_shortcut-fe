@@ -718,7 +718,7 @@ sfe_cm_ipv6_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
 }
 
 
-#ifdef CONFIG_NF_CONNTRACK_EVENTS
+#if 0
 /*
  * sfe_cm_conntrack_event()
  *	Callback event invoked when a conntrack connection's state changes.
@@ -801,18 +801,6 @@ static int sfe_cm_conntrack_event(unsigned int events, struct nf_ct_event *item)
 	return NOTIFY_DONE;
 }
 
-/*
- * Netfilter conntrack event system to monitor connection tracking changes
- */
-#ifdef CONFIG_NF_CONNTRACK_CHAIN_EVENTS
-static struct notifier_block sfe_cm_conntrack_notifier = {
-	.notifier_call = sfe_cm_conntrack_event,
-};
-#else
-static struct nf_ct_event_notifier sfe_cm_conntrack_notifier = {
-	.fcn = sfe_cm_conntrack_event,
-};
-#endif
 #endif
 
 /*
@@ -1078,10 +1066,6 @@ static int __init sfe_cm_init(void)
 	sfe_ipv6_register_sync_rule_callback(sfe_cm_sync_rule);
 	return 0;
 
-#ifdef CONFIG_NF_CONNTRACK_EVENTS
-exit4:
-#endif
-	nf_unregister_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
 
 exit3:
 	unregister_inet6addr_notifier(&sc->inet6_notifier);
