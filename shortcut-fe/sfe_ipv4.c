@@ -632,11 +632,11 @@ static inline unsigned int sfe_ipv4_get_connection_match_hash(struct net_device 
  *
  * On entry we must be holding the lock that protects the hash table.
  */
-static struct sfe_ipv4_connection_match *
+/*static struct sfe_ipv4_connection_match *
 sfe_ipv4_find_sfe_ipv4_connection_match(struct sfe_ipv4 *si, struct net_device *dev, uint8_t protocol,
 					__be32 src_ip, __be16 src_port,
-					__be32 dest_ip, __be16 dest_port) __attribute__((always_inline));
-static struct sfe_ipv4_connection_match *
+					__be32 dest_ip, __be16 dest_port) __attribute__((always_inline));*/
+static inline __always_inline struct sfe_ipv4_connection_match *
 sfe_ipv4_find_sfe_ipv4_connection_match(struct sfe_ipv4 *si, struct net_device *dev, uint8_t protocol,
 					__be32 src_ip, __be16 src_port,
 					__be32 dest_ip, __be16 dest_port)
@@ -1270,9 +1270,9 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	uint8_t ttl;
 	struct net_device *xmit_dev;
 	struct sk_buff *new_skb ;
-	int k;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
+	struct sfe_ipv4_eth_hdr *eth;
         struct sfe_ipv4_connection *c;
 	/*
 	 * Is our packet too short to contain a valid UDP header?
@@ -1497,7 +1497,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 					pskb_expand_head(skb, ETH_HLEN, 0,
 							 GFP_ATOMIC);
 
-				struct sfe_ipv4_eth_hdr *eth = (struct sfe_ipv4_eth_hdr *)__skb_push(skb, ETH_HLEN);
+				eth = (struct sfe_ipv4_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IP);
 				eth->h_dest[0] = cm->xmit_dest_mac[0];
 				eth->h_dest[1] = cm->xmit_dest_mac[1];
@@ -1711,9 +1711,9 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	uint32_t flags;
 	struct net_device *xmit_dev;
 	struct sk_buff *new_skb ;
-	int k;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
+	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
 	uint32_t data_offs;
 	bool close_aggr = false;
@@ -2126,7 +2126,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 					pskb_expand_head(skb, ETH_HLEN, 0,
 							 GFP_ATOMIC);
 
-				struct sfe_ipv4_eth_hdr *eth = (struct sfe_ipv4_eth_hdr *)__skb_push(skb, ETH_HLEN);
+				eth = (struct sfe_ipv4_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IP);
 				eth->h_dest[0] = cm->xmit_dest_mac[0];
 				eth->h_dest[1] = cm->xmit_dest_mac[1];
