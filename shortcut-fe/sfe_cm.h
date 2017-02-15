@@ -167,15 +167,28 @@ struct sfe_connection_mark {
 	uint32_t mark;
 };
 
+/*Common API for sfe tcpdump enablement */
+static int sfe_tcpdump_enable = 1;
+static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_prev)
+{
+    struct net_device *dev;
+    dev = skb->dev;
+    int ret;
+    if (pt_prev) {
+        atomic_inc(&skb->users);
+        ret = pt_prev->func(skb, skb->dev, pt_prev, dev);
+    }
+    return ret;
+}
+
 /*
  * Type used for a sync rule callback.
  */
 typedef void (*sfe_sync_rule_callback_t)(struct sfe_connection_sync *);
-
 /*
  * IPv4 APIs used by connection manager
  */
-extern int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb);
+extern int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_type *pt_prev);
 extern int sfe_ipv4_create_rule(struct sfe_connection_create *sic);
 extern void sfe_ipv4_destroy_rule(struct sfe_connection_destroy *sid);
 extern void sfe_ipv4_destroy_all_rules_for_dev(struct net_device *dev);
@@ -187,7 +200,7 @@ extern void sfe_ipv4_mark_rule(struct sfe_connection_mark *mark);
 /*
  * IPv6 APIs used by connection manager
  */
-extern int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb);
+extern int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_type *pt_prev);
 extern int sfe_ipv6_create_rule(struct sfe_connection_create *sic);
 extern void sfe_ipv6_destroy_rule(struct sfe_connection_destroy *sid);
 extern void sfe_ipv6_destroy_all_rules_for_dev(struct net_device *dev);
