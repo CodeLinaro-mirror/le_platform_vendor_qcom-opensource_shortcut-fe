@@ -29,7 +29,7 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_conntrack_core.h>
 #include <linux/if_bridge.h>
-
+#include <linux/netdevice.h>
 #include "sfe.h"
 #include "sfe_cm.h"
 #include "sfe_backport.h"
@@ -105,18 +105,18 @@ struct sfe_cm __sc;
 /*
  * Expose the hook for the receive processing.
  */
-extern int (*athrs_fast_nat_recv)(struct sk_buff *skb);
+extern int (*athrs_fast_nat_recv)(struct sk_buff *skb,struct packet_type *pt_tmp);
 extern void (*delete_sfe_entry)(struct nf_conn *ct);
 
 /*
  * Expose what should be a static flag in the TCP connection tracker.
  */
 extern int nf_ct_tcp_no_window_check;
-
 /*
  * sfe_cm_incr_exceptions()
  *	increase an exception counter.
  */
+ /*sfe function */
 static inline void sfe_cm_incr_exceptions(sfe_cm_exception_t except)
 {
 	struct sfe_cm *sc = &__sc;
@@ -132,7 +132,7 @@ static inline void sfe_cm_incr_exceptions(sfe_cm_exception_t except)
  *
  * Returns 1 if the packet is forwarded or 0 if it isn't.
  */
-int sfe_cm_recv(struct sk_buff *skb)
+int sfe_cm_recv(struct sk_buff *skb,struct packet_type *pt_tmp)
 {
 	struct net_device *dev;
 
@@ -171,7 +171,7 @@ int sfe_cm_recv(struct sk_buff *skb)
 		}
 #endif
 
-		return sfe_ipv4_recv(dev, skb);
+		return sfe_ipv4_recv(dev, skb, pt_tmp);
 	}
 
 	if (likely(htons(ETH_P_IPV6) == skb->protocol)) {
@@ -197,7 +197,7 @@ int sfe_cm_recv(struct sk_buff *skb)
 		}
 #endif
 
-		return sfe_ipv6_recv(dev, skb);
+		return sfe_ipv6_recv(dev, skb, pt_tmp);
 	}
 
 	DEBUG_TRACE("not IP packet\n");
@@ -1125,7 +1125,6 @@ static void __exit sfe_cm_exit(void)
 
 module_init(sfe_cm_init)
 module_exit(sfe_cm_exit)
-
 MODULE_AUTHOR("Qualcomm Atheros Inc.");
 MODULE_DESCRIPTION("Shortcut Forwarding Engine - Connection Manager");
 MODULE_LICENSE("Dual BSD/GPL");

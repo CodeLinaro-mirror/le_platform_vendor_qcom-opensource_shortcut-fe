@@ -576,7 +576,6 @@ typedef bool (*sfe_ipv6_debug_xml_write_method_t)(struct sfe_ipv6 *si, char *buf
 						  int *total_read, struct sfe_ipv6_debug_xml_write_state *ws);
 
 struct sfe_ipv6 __si6;
-
 /*
  * sfe_ipv6_get_debug_dev()
  */
@@ -2452,7 +2451,7 @@ static int sfe_ipv6_recv_icmp(struct sfe_ipv6 *si, struct sk_buff *skb, struct n
  *
  * Returns 1 if the packet is forwarded or 0 if it isn't.
  */
-int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb)
+int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_type *pt_prev)
 {
 	struct sfe_ipv6 *si = &__si6;
 	unsigned int len;
@@ -2542,7 +2541,9 @@ int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb)
 		flush_on_find = true;
 		next_hdr = ext_hdr->next_hdr;
 	}
-
+	if (unlikely(sfe_tcpdump_enable)) {
+		sfe_tcpdump_log(skb,pt_prev);
+	}
 	if (IPPROTO_TCP == next_hdr) {
 		return sfe_ipv6_recv_tcp(si, skb, dev, len, iph, ihl, flush_on_find);
 	}
@@ -3952,7 +3953,6 @@ static void __exit sfe_ipv6_exit(void)
 
 module_init(sfe_ipv6_init)
 module_exit(sfe_ipv6_exit)
-
 EXPORT_SYMBOL(sfe_ipv6_recv);
 EXPORT_SYMBOL(sfe_ipv6_create_rule);
 EXPORT_SYMBOL(sfe_ipv6_destroy_rule);

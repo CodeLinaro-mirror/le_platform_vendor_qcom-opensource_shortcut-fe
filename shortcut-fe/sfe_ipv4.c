@@ -63,6 +63,7 @@ static struct ctl_table sfe_sysctl_debug[] =
     XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold_count", &threshold_count),
     XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "timeout_count", &timeout_count),
     XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "skip_mtu_check", &skip_mtu_check),
+    XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG,"sfe_tcpdump_enable",&sfe_tcpdump_enable),
     {0, },
 };
 
@@ -2454,7 +2455,7 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
  *
  * Returns 1 if the packet is forwarded or 0 if it isn't.
  */
-int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb)
+int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_type *pt_prev)
 {
 	struct sfe_ipv4 *si = &__si;
 	unsigned int len;
@@ -2542,6 +2543,10 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb)
 	}
 
 	protocol = iph->protocol;
+	/* send to tcpdump before processing on the basis of protocol */
+	if (unlikely(sfe_tcpdump_enable)) {
+		sfe_tcpdump_log(skb,pt_prev);
+	}
 
 	if (IPPROTO_TCP == protocol) {
 		return sfe_ipv4_recv_tcp(si, skb, dev, len, iph, ihl, flush_on_find);
@@ -3961,7 +3966,6 @@ static void __exit sfe_ipv4_exit(void)
 
 module_init(sfe_ipv4_init)
 module_exit(sfe_ipv4_exit)
-
 EXPORT_SYMBOL(sfe_ipv4_recv);
 EXPORT_SYMBOL(sfe_ipv4_create_rule);
 EXPORT_SYMBOL(sfe_ipv4_destroy_rule);
