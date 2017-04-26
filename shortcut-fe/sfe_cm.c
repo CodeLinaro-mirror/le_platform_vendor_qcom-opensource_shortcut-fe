@@ -363,6 +363,9 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	struct nf_conntrack_tuple reply_tuple;
 	struct net *net = NULL;
 	struct nf_tcp_net *tcp_net = NULL;
+	struct nf_conn_acct *acct = NULL;
+	struct nf_conn_counter *counter = NULL;
+	u64 pkts;
 
 	/*
 	 * Don't process broadcast or multicast packets.
@@ -447,6 +450,26 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_CT_IS_ALG);
 		DEBUG_TRACE("connection has helper\n");
 		return NF_ACCEPT;
+	}
+
+	/*
+	 * Do not create sfe entry until the initial packet threshold is met
+	 */
+	acct = nf_conn_acct_find(ct);
+	if (acct) {
+			counter = acct->counter;
+			/*
+			 * Packet threshold here is the aggregate of packets in both
+			 * the directions.
+			 */
+			pkts = atomic64_read(&counter[CTINFO2DIR(ctinfo)].packets) +
+			       atomic64_read(&counter[!CTINFO2DIR(ctinfo)].packets);
+			/* Report if the packet threshold is reached. */
+			if ((nf_conntrack_pkt_threshold > 0) &&
+			    (pkts < nf_conntrack_pkt_threshold)) {
+					DEBUG_TRACE("Initial packet threshold still not reached\n");
+					return NF_ACCEPT;
+			}
 	}
 
 	/*
@@ -1128,4 +1151,3 @@ module_exit(sfe_cm_exit)
 MODULE_AUTHOR("Qualcomm Atheros Inc.");
 MODULE_DESCRIPTION("Shortcut Forwarding Engine - Connection Manager");
 MODULE_LICENSE("Dual BSD/GPL");
-
