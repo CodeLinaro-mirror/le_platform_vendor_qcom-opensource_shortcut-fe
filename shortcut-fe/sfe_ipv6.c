@@ -2091,8 +2091,8 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	struct net_device *xmit_dev;
 	struct sk_buff *new_skb;
 	const struct net_device_ops *ops;
-	int queue_index = 0;
-	unsigned int skb_trim_len;
+	int queue_index = 0, ret = 0;
+	unsigned int skb_trim_len, trim_len = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
 
@@ -2288,15 +2288,37 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	if (likely(c->use_destMac || cm->addEthMAC)) {
 		if (likely(cm->flags & SFE_IPV6_CONNECTION_MATCH_FLAG_WRITE_L2_HDR)) {
 			if (unlikely(!(cm->flags & SFE_IPV6_CONNECTION_MATCH_FLAG_WRITE_FAST_ETH_HDR))) {
+				if (skb_headroom(skb) <
+					xmit_dev->hard_header_len) {
+					ret = pskb_expand_head(skb,
+								HH_DATA_ALIGN(
+						xmit_dev->hard_header_len -
+						skb_headroom(skb)),
+						0, GFP_ATOMIC);
+					if (ret) {
+						kfree_skb(skb);
+						pr_debug("pskb_expand_head failed = %d",
+									ret);
+						return 0;
+					}
+				}
 				dev_hard_header(skb, xmit_dev, ETH_P_IPV6,
 						cm->xmit_dest_mac, cm->xmit_src_mac, len);
+				trim_len = xmit_dev->hard_header_len;
 			} else {
 				/*
 				 * For the simple case we write this really fast.
 				 */
-				if (cm->expand_head)
-					pskb_expand_head(skb, ETH_HLEN, 0,
+				if (skb_headroom(skb) <
+					xmit_dev->hard_header_len)
+					ret = pskb_expand_head(skb, ETH_HLEN, 0,
 							GFP_ATOMIC);
+					if (ret) {
+						kfree_skb(skb);
+						pr_debug("pskb_expand_head failed = %d",
+									ret);
+						return 0;
+					}
 
 				eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IPV6);
@@ -2306,6 +2328,7 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 				eth->h_source[0] = cm->xmit_src_mac[0];
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
+				trim_len = ETH_HLEN;
 			}
 		}
 	}
@@ -2403,7 +2426,8 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 		pr_debug("\nUDP_v6-Uplink. No Aggregation. ");
 		if (cm->pad_removal_require) {
 			skb_trim_len=ntohs(iph->payload_len)+sizeof(struct sfe_ipv6_ip_hdr);
-			if (pskb_trim_rcsum(skb, skb_trim_len)) {
+			if (pskb_trim_rcsum(skb, skb_trim_len +
+				trim_len)) {
 				DEBUG_TRACE ("\n padding removal failed\n");
 			}
 		}
@@ -2510,9 +2534,12 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	struct net_device *xmit_dev;
 	struct sk_buff *new_skb ;
 	const struct net_device_ops *ops;
-	int queue_index = 0;
+	int queue_index = 0, ret = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
+	uint32_t data_offs;
+	unsigned int trim_len = 0;
+	bool close_aggr = false;
 
 	/*
 	 * Is our packet too short to contain a valid UDP header?
@@ -2894,15 +2921,37 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	if (likely(c->use_destMac || cm->addEthMAC)) {
 		if (likely(cm->flags & SFE_IPV6_CONNECTION_MATCH_FLAG_WRITE_L2_HDR)) {
 			if (unlikely(!(cm->flags & SFE_IPV6_CONNECTION_MATCH_FLAG_WRITE_FAST_ETH_HDR))) {
+				if (skb_headroom(skb) <
+					xmit_dev->hard_header_len) {
+					ret = pskb_expand_head(skb ,
+								HH_DATA_ALIGN(
+						xmit_dev->hard_header_len -
+						skb_headroom(skb)) ,
+						0, GFP_ATOMIC);
+					if (ret) {
+						kfree_skb(skb);
+						pr_debug("pskb_expand_head failed = %d",
+									ret);
+						return 0;
+					}
+				}
 				dev_hard_header(skb, xmit_dev, ETH_P_IPV6,
 						cm->xmit_dest_mac, cm->xmit_src_mac, len);
+				trim_len = xmit_dev->hard_header_len;
 			} else {
 				/*
 				 * For the simple case we write this really fast.
 				 */
-				if (cm->expand_head)
-					pskb_expand_head(skb, ETH_HLEN, 0,
+				if (skb_headroom(skb) <
+					xmit_dev->hard_header_len)
+					ret = pskb_expand_head(skb, ETH_HLEN, 0,
 							GFP_ATOMIC);
+					if (ret) {
+						kfree_skb(skb);
+						pr_debug("pskb_expand_head failed = %d",
+									ret);
+						return 0;
+					}
 
 				eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IPV6);
@@ -2912,6 +2961,7 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 				eth->h_source[0] = cm->xmit_src_mac[0];
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
+				trim_len = ETH_HLEN;
 			}
 		}
 	}
@@ -3008,9 +3058,9 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	{
 		pr_debug("\nTCP_v6-UpLink. No Aggregation. ");
 		if (cm->pad_removal_require) {
-			if (pskb_trim_rcsum(skb, ntohs(iph->payload_len)+sizeof(struct sfe_ipv6_ip_hdr))) {
+			if (pskb_trim_rcsum(skb, ntohs(iph->payload_len)+
+				sizeof(struct sfe_ipv6_ip_hdr)+trim_len))
 				DEBUG_TRACE ("\n padding removal failed\n");
-			}
 		}
 		dev_queue_xmit(skb);
 		return 1;
@@ -3751,16 +3801,12 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
-	if ((strncmp(src_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
-	{
+	if ((strncmp(src_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0))
 		original_cm->pad_removal_require = true;
-		reply_cm->pad_removal_require= false;
-	}
-	else if ((strncmp(dest_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
-	{
-		original_cm->pad_removal_require = false;
+
+	if ((strncmp(dest_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0))
 		reply_cm->pad_removal_require= true;
-	}
+
 	/*
 	 * Take hold of our source and dest devices for the duration of the connection.
 	 */
