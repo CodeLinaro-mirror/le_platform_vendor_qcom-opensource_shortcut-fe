@@ -1267,7 +1267,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	uint8_t ttl;
 	struct net_device *xmit_dev;
 	struct sk_buff *new_skb ;
-	int k;
+	int k, trim_len = 0;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
         struct sfe_ipv4_connection *c;
@@ -1478,19 +1478,29 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	skb->dev = xmit_dev;
 
 	c = cm->connection;
+
 	if (likely(c->use_destMac || cm->addEthMAC)) {
 		/*
 		 * Check to see if we need to write a header.
 		 */
 		if (likely(cm->flags & SFE_IPV4_CONNECTION_MATCH_FLAG_WRITE_L2_HDR)) {
 			if (unlikely(!(cm->flags & SFE_IPV4_CONNECTION_MATCH_FLAG_WRITE_FAST_ETH_HDR))) {
+				if (skb_headroom(skb) <
+					xmit_dev->hard_header_len) {
+					pskb_expand_head(skb, HH_DATA_ALIGN(
+					xmit_dev->hard_header_len -
+						skb_headroom(skb)),
+							0, GFP_ATOMIC);
+				}
 				dev_hard_header(skb, xmit_dev, ETH_P_IP,
 						cm->xmit_dest_mac, cm->xmit_src_mac, len);
+				trim_len = xmit_dev->hard_header_len;
 			} else {
 				/*
 				 * For the simple case we write this really fast.
 				 */
-				if (cm->expand_head)
+				if (skb_headroom(skb) <
+					xmit_dev->hard_header_len)
 					pskb_expand_head(skb, ETH_HLEN, 0,
 							 GFP_ATOMIC);
 
@@ -1502,6 +1512,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 				eth->h_source[0] = cm->xmit_src_mac[0];
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
+				trim_len = ETH_HLEN;
 			}
 		}
 	}
@@ -1601,7 +1612,8 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		* Remove padding if require
 		*/
 		if (cm->pad_removal_require) {
-			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len))) {
+			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
+							trim_len)) {
 				DEBUG_TRACE ("\n padding removal failed\n");
 			}
 		}
@@ -1708,7 +1720,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	uint32_t flags;
 	struct net_device *xmit_dev;
 	struct sk_buff *new_skb ;
-	int k;
+	int k, trim_len = 0;
 	const struct net_device_ops *ops;
 	int queue_index = 0;
         struct sfe_ipv4_connection *c;
@@ -2112,15 +2124,24 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		 */
 		if (likely(cm->flags & SFE_IPV4_CONNECTION_MATCH_FLAG_WRITE_L2_HDR)) {
 			if (unlikely(!(cm->flags & SFE_IPV4_CONNECTION_MATCH_FLAG_WRITE_FAST_ETH_HDR))) {
+				if (skb_headroom(skb) <
+					xmit_dev->hard_header_len) {
+					pskb_expand_head(skb, HH_DATA_ALIGN(
+						xmit_dev->hard_header_len -
+						skb_headroom(skb)),
+							0, GFP_ATOMIC);
+				}
 				dev_hard_header(skb, xmit_dev, ETH_P_IP,
 						cm->xmit_dest_mac, cm->xmit_src_mac, len);
+				trim_len = xmit_dev->hard_header_len;
 			} else {
 				/*
 				 * For the simple case we write this really fast.
 				 */
-				if (cm->expand_head)
+				if (skb_headroom(skb) < ETH_HLEN) {
 					pskb_expand_head(skb, ETH_HLEN, 0,
 							 GFP_ATOMIC);
+				}
 
 				struct sfe_ipv4_eth_hdr *eth = (struct sfe_ipv4_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IP);
@@ -2130,6 +2151,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 				eth->h_source[0] = cm->xmit_src_mac[0];
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
+				trim_len = ETH_HLEN;
 			}
 		}
 	}
@@ -2238,7 +2260,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		* Remove padding if require
 		*/
 		if (cm->pad_removal_require) {
-			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len))) {
+			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
+						trim_len)) {
 				DEBUG_TRACE ("\n padding removal failed\n");
 			}
 		}
@@ -2962,17 +2985,12 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	*/
 
 	/*Uplink case*/
-	if ((strncmp(src_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
-	{
+	if ((strncmp(src_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0))
 		original_cm->pad_removal_require = true;
-		reply_cm->pad_removal_require= false;
-	}
+
 	/*Downlink case*/
-	else if ((strncmp(dest_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0 ))
-	{
-		original_cm->pad_removal_require = false;
+	if ((strncmp(dest_dev->name, ETH_INTF, ETH_INTF_LEN)  == 0))
 		reply_cm->pad_removal_require= true;
-	}
 
 	/*
 	 * Take hold of our source and dest devices for the duration of the connection.
@@ -3009,7 +3027,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	/*
 	 * We have everything we need!
 	 */
-	DEBUG_INFO("new connection - mark: %08x, p: %d\n"
+	pr_debug("new connection - mark: %08x, p: %d\n"
 		   "  s: %s:%pM(%pM):%pI4(%pI4):%u(%u)\n"
 		   "  d: %s:%pM(%pM):%pI4(%pI4):%u(%u)\n",
 		   sic->mark, sic->protocol,
