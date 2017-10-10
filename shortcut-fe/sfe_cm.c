@@ -24,6 +24,8 @@
 #include <linux/inetdevice.h>
 #include <linux/netfilter_bridge.h>
 #include <linux/netfilter_ipv6.h>
+#include <linux/netfilter.h>
+#include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_acct.h>
 #include <net/netfilter/nf_conntrack_helper.h>
 #include <net/netfilter/nf_conntrack_zones.h>
@@ -722,11 +724,13 @@ done1:
 	return NF_ACCEPT;
 }
 
+
+#ifdef ISTARGETPOORWILLS
 /*
  * sfe_cm_ipv4_post_routing_hook()
  *	Called for packets about to leave the box - either locally generated or forwarded from another interface
  */
-sfe_cm_ipv4_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
+sfe_cm_ipv4_post_routing_hook(priv, skb, state)
 {
 	return sfe_cm_post_routing(skb, true);
 }
@@ -735,10 +739,24 @@ sfe_cm_ipv4_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
  * sfe_cm_ipv6_post_routing_hook()
  *	Called for packets about to leave the box - either locally generated or forwarded from another interface
  */
+sfe_cm_ipv6_post_routing_hook(priv, skb, state)
+{
+	return sfe_cm_post_routing(skb, false);
+}
+
+#else
+
+sfe_cm_ipv4_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
+{
+	return sfe_cm_post_routing(skb, true);
+}
+
 sfe_cm_ipv6_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
 {
 	return sfe_cm_post_routing(skb, false);
 }
+
+#endif
 
 
 #if 0
@@ -836,7 +854,9 @@ static int sfe_cm_conntrack_event(unsigned int events, struct nf_ct_event *item)
 static struct nf_hook_ops sfe_cm_ops_post_routing[] __read_mostly = {
 	{
 		.hook = __sfe_cm_ipv4_post_routing_hook,
+#ifndef ISTARGETPOORWILLS
 		.owner = THIS_MODULE,
+#endif
 		.pf = NFPROTO_IPV4,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP_PRI_NAT_SRC + 1,
@@ -844,7 +864,9 @@ static struct nf_hook_ops sfe_cm_ops_post_routing[] __read_mostly = {
 #ifdef SFE_SUPPORT_IPV6
 	{
 		.hook = __sfe_cm_ipv6_post_routing_hook,
+#ifndef ISTARGETPOORWILLS
 		.owner = THIS_MODULE,
+#endif
 		.pf = NFPROTO_IPV6,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP6_PRI_NAT_SRC + 1,
@@ -895,21 +917,31 @@ static void sfe_cm_sync_rule(struct sfe_connection_sync *sis)
 	/*
 	 * Look up conntrack connection
 	 */
+#ifdef ISTARGETPOORWILLS
+	h = nf_conntrack_find_get(&init_net, NF_CT_DEFAULT_ZONE_ID, &tuple);
+#else
 	h = nf_conntrack_find_get(&init_net, NF_CT_DEFAULT_ZONE, &tuple);
+#endif
 	if (unlikely(!h)) {
 		DEBUG_TRACE("no connection found\n");
 		return;
 	}
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
-	NF_CT_ASSERT(ct->timeout.data == (unsigned long)ct);
 
+#ifndef ISTARGETPOORWILLS
+	NF_CT_ASSERT(ct->timeout.data == (unsigned long)ct);
+#endif
 	/*
 	 * Only update if this is not a fixed timeout
 	 */
 	if (!test_bit(IPS_FIXED_TIMEOUT_BIT, &ct->status)) {
 		spin_lock_bh(&ct->lock);
+#ifdef ISTARGETPOORWILLS
+		ct->timeout += sis->delta_jiffies;
+#else
 		ct->timeout.expires += sis->delta_jiffies;
+#endif
 		spin_unlock_bh(&ct->lock);
 	}
 

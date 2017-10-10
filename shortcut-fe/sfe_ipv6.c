@@ -24,6 +24,7 @@
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
 #include <linux/hashtable.h>
+#include <linux/proc_fs.h>
 
 #include "sfe.h"
 #include "sfe_cm.h"
@@ -691,7 +692,7 @@ static void sfe_ipv6_destroy_packet_stats_list(void)
 
 }
 
-static u32 ht_conn_hash(unsigned long saddr[])
+static u32 ht_conn_hash(unsigned long *saddr)
 {
 	return (saddr[0] ^ saddr[1] ^ saddr[2] ^ saddr[3] ^ ( 5 << 16));
 }
@@ -711,13 +712,14 @@ static void sfe_ipv6_remove_packet_stats_connection(struct sfe_ipv6_addr * clien
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
-
-	key = ht_conn_hash(client_addr);
+	key = ht_conn_hash((unsigned long *) client_addr);
 
 	spin_lock_bh(&si->lock);
 	hash_for_each_possible(si->packet_stats_htable, curr, sfe_ipv6_packet_hash_list, key) {
-		if(sfe_ipv6_addr_equal(client_addr, &curr->packet_stats_node.client_src_addr)) {
-			DEBUG_INFO("Connection found \n");
+		if (sfe_ipv6_addr_equal(client_addr,
+				(struct sfe_ipv6_addr *)&curr->
+				packet_stats_node.client_src_addr)) {
+			DEBUG_INFO("Connection found");
 			hash_del(&curr->sfe_ipv6_packet_hash_list);
 			kfree(curr);
 			si->num_of_pack_stat_nodes--;
@@ -744,13 +746,19 @@ static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct 
 	struct hlist_node *tmp;
 	u32 key;
 
-	key = ht_conn_hash(node->packet_stats_node.client_src_addr);
+	key = ht_conn_hash((unsigned long *)
+				node->packet_stats_node.client_src_addr);
 	hash_for_each_possible(si->packet_stats_htable, curr, sfe_ipv6_packet_hash_list, key) {
-		if (sfe_ipv6_addr_equal(&node->packet_stats_node.client_src_addr, &curr->packet_stats_node.client_src_addr)) {
+		if (sfe_ipv6_addr_equal(
+				(struct sfe_ipv6_addr *)
+				&node->packet_stats_node.client_src_addr,
+				(struct sfe_ipv6_addr *)
+				&curr->packet_stats_node.client_src_addr)) {
 			return;
 		}
 	}
-	key = ht_conn_hash(node->packet_stats_node.client_src_addr);
+	key = ht_conn_hash((unsigned long *)
+			node->packet_stats_node.client_src_addr);
 	hash_add(si->packet_stats_htable , &node->sfe_ipv6_packet_hash_list, key);
 	si->num_of_pack_stat_nodes++;
 }
@@ -769,9 +777,11 @@ static bool sfe_ipv6_update_packet_stats_connection(struct sfe_ipv6* sic,struct 
 	struct hlist_node *tmp;
 	u32 key;
 
-	key = ht_conn_hash(client_addr);
+	key = ht_conn_hash((unsigned long *)client_addr);
 	hash_for_each_possible(sic->packet_stats_htable, curr, sfe_ipv6_packet_hash_list, key) {
-		if ((sfe_ipv6_addr_equal(client_addr, &curr->packet_stats_node.client_src_addr)))
+		if ((sfe_ipv6_addr_equal(client_addr, (
+					struct sfe_ipv6_addr *)&curr->
+					packet_stats_node.client_src_addr)))
 		{
 			curr->packet_stats_node.packet_stat_node_rx_byte_count += rx_bytes;
 			curr->packet_stats_node.packet_stat_node_tx_byte_count += tx_bytes;

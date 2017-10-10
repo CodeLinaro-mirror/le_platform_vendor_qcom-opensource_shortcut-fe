@@ -24,6 +24,7 @@
 #include <linux/etherdevice.h>
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
+#include <linux/proc_fs.h>
 
 #include "sfe.h"
 #include "sfe_cm.h"

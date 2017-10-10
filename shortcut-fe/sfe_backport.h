@@ -17,6 +17,21 @@
 
 #include <linux/version.h>
 
+#ifdef ISTARGETPOORWILLS
+#define sfe_cm_ipv4_post_routing_hook(PRIV, SKB, STATE) \
+static unsigned int __sfe_cm_ipv4_post_routing_hook(void *PRIV, \
+						struct sk_buff *SKB, \
+						const struct \
+						nf_hook_state * STATE)
+
+#define sfe_cm_ipv6_post_routing_hook(PRIV, SKB, STATE) \
+static unsigned int __sfe_cm_ipv6_post_routing_hook(void *PRIV, \
+						struct sk_buff *SKB, \
+						const struct \
+						nf_hook_state * STATE)
+
+#else
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 #define sfe_cm_ipv4_post_routing_hook(HOOKNUM, OPS, SKB, UNUSED, OUT, OKFN) \
 static unsigned int __sfe_cm_ipv4_post_routing_hook(const struct nf_hook_ops *OPS, \
@@ -46,7 +61,7 @@ static unsigned int __sfe_cm_ipv6_post_routing_hook(unsigned int HOOKNUM, \
 						    const struct net_device *OUT, \
 						    int (*OKFN)(struct sk_buff *))
 #endif
-
+#endif
 /*
  * sfe_dev_get_master
  * 	get master of bridge port, and hold it
