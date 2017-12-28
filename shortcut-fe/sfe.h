@@ -25,6 +25,9 @@
  * of any packets is actually correct too.  Right now we're relying on
  * the bridge layer to do this sort of thing for us.
  */
+
+#include <linux/ipc_logging.h>
+
 #define SFE_HOOK_ABOVE_BRIDGE 0
 #define MAX_INTF_LEN 50
 #define SFE_MAX_CMD_LEN 100
@@ -39,54 +42,123 @@
 #define WLAN_INTF4 "wlan3"
 #define ECM_INTF "ecm0"
 #define ETH_INTF "eth0"
+#define IPCLOG_STATE_PAGES 2
+#define __FILENAME__ (strrchr(__FILE__, '/') ? \
+	strrchr(__FILE__, '/') + 1 : __FILE__)
+
 
 #ifndef SFE_SUPPORT_IPV6
 #define SFE_SUPPORT_IPV6
 #endif
+
 /*
  * Debug output verbosity level.
  */
 #define DEBUG_LEVEL 2
+static void *ipc_sfe_log_ctxt;
+static void *ipc_sfe_log_ctxt_low;
 
-#if (DEBUG_LEVEL < 1)
-#define DEBUG_ERROR(s, ...)
-#else
+enum {
+	ERROR_LEVEL = 1,
+	WARN_LEVEL = 2,
+	INFO_LEVEL = 3,
+	TRACE_LEVEL = 4,
+};
+
+static int debug_level = WARN_LEVEL;
+
 #define DEBUG_ERROR(s, ...) \
 do { \
-	printk("%s[%u]: ERROR:", __FILE__, __LINE__); \
-	printk(s, ##__VA_ARGS__); \
+	if (debug_level >= ERROR_LEVEL) { \
+		printk("%s: %s[%u]: ERROR:", \
+		__FILENAME__, __func__, __LINE__); \
+		printk(s, ##__VA_ARGS__); \
+		if (ipc_sfe_log_ctxt) { \
+			ipc_log_string(ipc_sfe_log_ctxt, \
+			"%s: %s[%u]: ERROR:" s, __FILENAME__, \
+			__func__, __LINE__, ##__VA_ARGS__); \
+		} \
+	} \
 } while (0)
-#endif
 
-#if (DEBUG_LEVEL < 2)
-#define DEBUG_WARN(s, ...)
-#else
 #define DEBUG_WARN(s, ...) \
 do { \
-	printk("%s[%u]: WARN:", __FILE__, __LINE__); \
-	printk(s, ##__VA_ARGS__); \
+	if (debug_level >= WARN_LEVEL) { \
+		printk("%s: %s[%u]: WARN:", \
+		__FILENAME__, __func__, __LINE__); \
+		printk(s, ##__VA_ARGS__); \
+		if (ipc_sfe_log_ctxt) { \
+			ipc_log_string(ipc_sfe_log_ctxt, \
+			"%s: %s[%u]: WARN:" s, __FILENAME__, \
+			__func__, __LINE__, ##__VA_ARGS__); \
+		} \
+	} \
 } while (0)
-#endif
 
-#if (DEBUG_LEVEL < 3)
-#define DEBUG_INFO(s, ...)
-#else
 #define DEBUG_INFO(s, ...) \
 do { \
-	printk("%s[%u]: INFO:", __FILE__, __LINE__); \
-	printk(s, ##__VA_ARGS__); \
+	if (debug_level >= INFO_LEVEL) { \
+		printk("%s: %s[%u]: INFO:", \
+		__FILENAME__, __func__, __LINE__); \
+		printk(s, ##__VA_ARGS__); \
+		if (ipc_sfe_log_ctxt) { \
+			ipc_log_string(ipc_sfe_log_ctxt, \
+			"%s: %s[%u]: INFO:" s, __FILENAME__, \
+			__func__, __LINE__, ##__VA_ARGS__);\
+		} \
+	} \
 } while (0)
-#endif
 
-#if (DEBUG_LEVEL < 4)
-#define DEBUG_TRACE(s, ...)
-#else
 #define DEBUG_TRACE(s, ...) \
 do { \
-	printk("%s[%u]: TRACE:", __FILE__, __LINE__); \
-	printk(s, ##__VA_ARGS__); \
+	if (debug_level >= TRACE_LEVEL) { \
+		printk("%s: %s[%u]: TRACE:", \
+		__FILENAME__, __func__, __LINE__); \
+		printk(s, ##__VA_ARGS__); \
+		if (ipc_sfe_log_ctxt) { \
+			ipc_log_string(ipc_sfe_log_ctxt, \
+			"%s: %s[%u]: TRACE:" s, __FILENAME__, \
+			__func__, __LINE__, ##__VA_ARGS__);\
+		} \
+	} \
 } while (0)
-#endif
+
+#define IPC_DEBUG(s, ...) \
+do { \
+	if (ipc_sfe_log_ctxt) { \
+		ipc_log_string(ipc_sfe_log_ctxt, \
+		"%s: %s[%u]: IPC DEBUG:" s, __FILENAME__, \
+		__func__, __LINE__, ##__VA_ARGS__);\
+	} \
+} while (0)
+
+#define DEBUG_INFO_LOW(s, ...) \
+	do { \
+		if (ipc_sfe_log_ctxt_low) { \
+			ipc_log_string(ipc_sfe_log_ctxt_low, \
+			"%s: %s[%u]: INFO LOW:" s, __FILENAME__, \
+			__func__, __LINE__, ##__VA_ARGS__);\
+		} \
+	} while (0)
+
+#define DEBUG_TRACE_LOW(s, ...) \
+do { \
+	if (ipc_sfe_log_ctxt_low) { \
+		ipc_log_string(ipc_sfe_log_ctxt_low, \
+		"%s: %s[%u]: TRACE LOW:" s, __FILENAME__, \
+		__func__, __LINE__, ##__VA_ARGS__);\
+	} \
+} while (0)
+
+#define IPC_DEBUG_LOW(s, ...) \
+do { \
+	if (ipc_sfe_log_ctxt_low) { \
+		ipc_log_string(ipc_sfe_log_ctxt_low, \
+		"%s: %s[%u]: IPC DEBUG LOW:" s, __FILENAME__, \
+		__func__, __LINE__, ##__VA_ARGS__);\
+	} \
+} while (0)
+
 
 #ifdef CONFIG_NF_FLOW_COOKIE
 typedef int (*flow_cookie_set_func_t)(u32 protocol, __be32 src_ip, __be16 src_port,

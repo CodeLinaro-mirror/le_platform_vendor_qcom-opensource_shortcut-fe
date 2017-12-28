@@ -74,6 +74,8 @@ static struct ctl_table sfe_sysctl_debug[] =
 	{0, },
 };
 
+static int sfe_v4_enable_ipc_low;
+
 
 typedef struct sfe_proc_sys_db
 {
@@ -1854,7 +1856,7 @@ static void sfe_ipv4_remove_sfe_ipv4_connection(struct sfe_ipv4 *si, struct sfe_
 	 */
 	if (packet_stats_enabled)
 	{
-		DEBUG_INFO("removing connection ipv4\n");
+		DEBUG_INFO_LOW("removing connection ipv4\n");
 
 		/*we need to update pack stat list before destroying
 		  we can use connection c whihc we are abt to destroy to update
@@ -1869,8 +1871,11 @@ static void sfe_ipv4_remove_sfe_ipv4_connection(struct sfe_ipv4 *si, struct sfe_
 			{
 				client_ip = c->dest_ip;
 			}
-			DEBUG_INFO("Destroyed updating  for %pI4, orig(rx) %d, reply(tx) %d \n", &client_ip,
-					c->original_match->rx_pack_stat_byte_count, c->reply_match->rx_pack_stat_byte_count);
+			IPC_DEBUG(
+				"Destroyed updating  for %pI4, orig(rx) %d, reply(tx) %d\n",
+				&client_ip,
+				c->original_match->rx_pack_stat_byte_count,
+				c->reply_match->rx_pack_stat_byte_count);
 			tx_bytes = c->reply_match->rx_pack_stat_byte_count;
 			c->reply_match->rx_pack_stat_byte_count = 0;
 			rx_bytes = c->original_match->rx_pack_stat_byte_count;
@@ -1879,8 +1884,11 @@ static void sfe_ipv4_remove_sfe_ipv4_connection(struct sfe_ipv4 *si, struct sfe_
 		else if (strncmp(c->reply_dev->name, si->ipv4_iface, strlen(si->ipv4_iface) - 1) == 0)
 		{
 			client_ip = c->src_ip;
-			DEBUG_INFO("Destroyed updating  for %pI4, orig(tx) %d, reply(rx) %d \n", &client_ip,
-					c->original_match->rx_pack_stat_byte_count,c->reply_match->rx_pack_stat_byte_count);
+			IPC_DEBUG(
+				"Destroyed updating  for %pI4, orig(tx) %d, reply(rx) %d\n",
+				&client_ip,
+				c->original_match->rx_pack_stat_byte_count,
+				c->reply_match->rx_pack_stat_byte_count);
 			rx_bytes = c->reply_match->rx_pack_stat_byte_count;
 			c->reply_match->rx_pack_stat_byte_count = 0;
 			tx_bytes = c->original_match->rx_pack_stat_byte_count;
@@ -1895,7 +1903,7 @@ static void sfe_ipv4_remove_sfe_ipv4_connection(struct sfe_ipv4 *si, struct sfe_
 
 		if (!ret)
 		{
-			DEBUG_INFO("pack stat node not found\n");
+			DEBUG_INFO_LOW("pack stat node not found\n");
 		}
 	}
 
@@ -2073,7 +2081,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("packet too short for UDP header\n");
+		DEBUG_TRACE_LOW("packet too short for UDP header\n");
 		return 0;
 	}
 
@@ -2107,7 +2115,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("no connection found\n");
+		DEBUG_TRACE_LOW("no connection found\n");
 		return 0;
 	}
 
@@ -2123,7 +2131,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("flush on find\n");
+		DEBUG_TRACE_LOW("flush on find\n");
 		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 		return 0;
 	}
@@ -2151,7 +2159,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("ttl too low\n");
+		DEBUG_TRACE_LOW("ttl too low\n");
 		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 		return 0;
 	}
@@ -2170,7 +2178,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("larger than mtu\n");
+			DEBUG_TRACE_LOW("larger than mtu\n");
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
 		}
@@ -2291,8 +2299,9 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 							0, GFP_ATOMIC);
 					if (ret) {
 						kfree_skb(skb);
-						pr_debug("pskb_expand_head failed = %d",
-									ret);
+						IPC_DEBUG_LOW(
+							"pskb_expand_head failed=%d",
+							ret);
 						return 0;
 					}
 				}
@@ -2309,8 +2318,9 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 							GFP_ATOMIC);
 					if (ret) {
 						kfree_skb(skb);
-						pr_debug("pskb_expand_head failed = %d",
-									ret);
+						IPC_DEBUG_LOW(
+							"pskb_expand_head failed = %d",
+							ret);
 						return 0;
 					}
 
@@ -2333,7 +2343,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 */
 	skb->mark = cm->connection->mark;
 	if (skb->mark) {
-		DEBUG_TRACE("SKB MARK is NON ZERO %x\n", skb->mark);
+		DEBUG_TRACE_LOW("SKB MARK is NON ZERO %x\n", skb->mark);
 	}
 #endif
 
@@ -2355,7 +2365,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 */
 	if (cm->do_aggr)
 	{
-		pr_debug("\nUDP_v4-Dowlink");
+		IPC_DEBUG_LOW("UDP_v4-Dowlink");
 
 		/*
 		 * Mark that this packet has been fast forwarded.
@@ -2383,7 +2393,8 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			}
 			threshold_count++;
 
-			pr_debug("\nPacket in List: %d ",aggr_params[cm->index].curr_dl_skb_num);
+			IPC_DEBUG_LOW("Packet in List: %d ",
+				aggr_params[cm->index].curr_dl_skb_num);
 			if(aggr_params[cm->index].skb_head)
 				dev_queue_xmit_list(aggr_params[cm->index].skb_head);
 			else
@@ -2417,14 +2428,14 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	}
 	else
 	{
-		pr_debug("\nUDP_v4-Uplink. No Aggregation.");
+		IPC_DEBUG_LOW("UDP_v4-Uplink. No Aggregation.");
 		/*
 		 * Remove padding if require
 		 */
 		if (cm->pad_removal_require) {
 			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
 							trim_len)) {
-				DEBUG_TRACE ("\n padding removal failed\n");
+				DEBUG_TRACE_LOW("\n padding removal failed\n");
 			}
 		}
 		dev_queue_xmit(skb);
@@ -2548,7 +2559,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("packet too short for TCP header\n");
+		DEBUG_TRACE_LOW("packet too short for TCP header\n");
 		return 0;
 	}
 
@@ -2589,14 +2600,14 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("no connection found - fast flags\n");
+			DEBUG_TRACE_LOW("no connection found - fast flags\n");
 			return 0;
 		}
 		si->exception_events[SFE_IPV4_EXCEPTION_EVENT_TCP_NO_CONNECTION_SLOW_FLAGS]++;
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("no connection found - slow flags: 0x%x\n",
+		DEBUG_TRACE_LOW("no connection found - slow flags: 0x%x\n",
 				flags & (TCP_FLAG_SYN | TCP_FLAG_RST | TCP_FLAG_FIN | TCP_FLAG_ACK));
 		return 0;
 	}
@@ -2613,7 +2624,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("flush on find\n");
+		DEBUG_TRACE_LOW("flush on find\n");
 		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 		return 0;
 	}
@@ -2640,7 +2651,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("ttl too low\n");
+		DEBUG_TRACE_LOW("ttl too low\n");
 		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 		return 0;
 	}
@@ -2659,7 +2670,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("larger than mtu\n");
+			DEBUG_TRACE_LOW("larger than mtu\n");
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
 		}
@@ -2676,7 +2687,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("TCP flags: 0x%x are not fast\n",
+		DEBUG_TRACE_LOW("TCP flags: 0x%x are not fast\n",
 				flags & (TCP_FLAG_SYN | TCP_FLAG_RST | TCP_FLAG_FIN | TCP_FLAG_ACK));
 		sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 		return 0;
@@ -2708,7 +2719,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("seq: %u exceeds right edge: %u\n",
+			DEBUG_TRACE_LOW("seq: %u exceeds right edge: %u\n",
 					seq, cm->protocol_state.tcp.max_end + 1);
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
@@ -2725,7 +2736,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("TCP data offset: %u, too small\n", data_offs);
+			DEBUG_TRACE_LOW("TCP data offset: %u, too small\n",
+				data_offs);
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
 		}
@@ -2742,7 +2754,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("TCP option SACK size is wrong\n");
+			DEBUG_TRACE_LOW("TCP option SACK size is wrong\n");
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
 		}
@@ -2758,8 +2770,9 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("TCP data offset: %u, past end of packet: %u\n",
-					data_offs, len);
+			DEBUG_TRACE_LOW(
+				"TCP data offset: %u, past end of packet: %u\n",
+				data_offs, len);
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
 		}
@@ -2777,7 +2790,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("seq: %u before left edge: %u\n",
+			DEBUG_TRACE_LOW("seq: %u before left edge: %u\n",
 					end, cm->protocol_state.tcp.end - counter_cm->protocol_state.tcp.max_win - 1);
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
@@ -2793,7 +2806,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("ack: %u exceeds right edge: %u\n",
+			DEBUG_TRACE_LOW("ack: %u exceeds right edge: %u\n",
 					sack, counter_cm->protocol_state.tcp.end + 1);
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
@@ -2813,7 +2826,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("ack: %u before left edge: %u\n", sack, left_edge);
+			DEBUG_TRACE_LOW("ack: %u before left edge: %u\n",
+				sack, left_edge);
 			sfe_ipv4_flush_sfe_ipv4_connection(si, c, SFE_SYNC_REASON_FLUSH);
 			return 0;
 		}
@@ -2948,8 +2962,9 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 							0, GFP_ATOMIC);
 					if (ret) {
 						kfree_skb(skb);
-						pr_debug("pskb_expand_head failed = %d",
-									ret);
+						IPC_DEBUG_LOW(
+							"pskb_expand_head failed = %d",
+							ret);
 						return 0;
 					}
 				}
@@ -2964,8 +2979,9 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 					ret = pskb_expand_head(skb, ETH_HLEN, 0,
 								GFP_ATOMIC);
 					if (ret) {
-						pr_debug("pskb_expand_head failed = %d",
-									ret);
+						IPC_DEBUG_LOW(
+							"pskb_expand_head failed = %d",
+							ret);
 						return 0;
 					}
 				}
@@ -2990,7 +3006,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 */
 	skb->mark = cm->connection->mark;
 	if (skb->mark) {
-		DEBUG_TRACE("SKB MARK is NON ZERO %x\n", skb->mark);
+		DEBUG_TRACE_LOW("SKB MARK is NON ZERO %x\n", skb->mark);
 	}
 #endif
 
@@ -3009,16 +3025,16 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	/*
 	 * do _aggr is set to true in case we need aggregation to happen
 	 */
-	pr_debug("\nAggregation Parameter value: %d",cm->do_aggr);
+	IPC_DEBUG_LOW("Aggregation Parameter value: %d", cm->do_aggr);
 	if ( cm->do_aggr)
 	{
-		pr_debug("\nTCP_v4-Dowlink");
+		IPC_DEBUG_LOW("TCP_v4-Dowlink");
 		/*
 		 * Check that our TCP data offset isn't too short
 		 */
 		data_offs = tcph->doff << 2;
 		close_aggr = ((len - sizeof(struct sfe_ipv4_ip_hdr) - data_offs) == 0) ? true : false;
-		pr_debug("\nclose_aggr variable value: %d",close_aggr);
+		IPC_DEBUG_LOW("close_aggr variable value: %d", close_aggr);
 
 		/*
 		 * Mark that this packet has been fast forwarded.
@@ -3046,7 +3062,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 
 			threshold_count++;
 
-			pr_debug("\nTotal Packet in List: %d ",aggr_params[cm->index].curr_dl_skb_num);
+			IPC_DEBUG_LOW("Total Packet in List: %d ",
+				aggr_params[cm->index].curr_dl_skb_num);
 			if(aggr_params[cm->index].skb_head)
 				dev_queue_xmit_list(aggr_params[cm->index].skb_head);
 			else
@@ -3075,14 +3092,15 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			}
 			aggr_params[cm->index].curr_dl_skb_num ++;
 
-			pr_debug("\nQueing packets in the list",cm->do_aggr);
+			IPC_DEBUG_LOW("Queing packets in the list",
+				cm->do_aggr);
 
 			return 1;
 		}
 	}
 	else
 	{
-		pr_debug("\nTCP_v4-UPLINK. No Aggregation. ");
+		IPC_DEBUG_LOW("TCP_v4-UPLINK. No Aggregation.");
 
 		/*
 		 * Remove padding if require
@@ -3090,7 +3108,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		if (cm->pad_removal_require) {
 			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
 						trim_len)) {
-				DEBUG_TRACE ("\n padding removal failed\n");
+				DEBUG_TRACE_LOW("\n padding removal failed\n");
 			}
 		}
 		dev_queue_xmit(skb);
@@ -3136,7 +3154,7 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("packet too short for ICMP header\n");
+		DEBUG_TRACE_LOW("packet too short for ICMP header\n");
 		return 0;
 	}
 
@@ -3151,7 +3169,7 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("unhandled ICMP type: 0x%x\n", icmph->type);
+		DEBUG_TRACE_LOW("unhandled ICMP type: 0x%x\n", icmph->type);
 		return 0;
 	}
 
@@ -3166,7 +3184,7 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("Embedded IP header not complete\n");
+		DEBUG_TRACE_LOW("Embedded IP header not complete\n");
 		return 0;
 	}
 
@@ -3180,7 +3198,7 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("IP version: %u\n", icmp_iph->version);
+		DEBUG_TRACE_LOW("IP version: %u\n", icmp_iph->version);
 		return 0;
 	}
 
@@ -3196,7 +3214,8 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("Embedded header not large enough for IP options\n");
+		DEBUG_TRACE_LOW(
+			"Embedded header not large enough for IP options\n");
 		return 0;
 	}
 
@@ -3219,7 +3238,8 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 				si->packets_not_forwarded++;
 				spin_unlock_bh(&si->lock);
 
-				DEBUG_TRACE("Incomplete embedded UDP header\n");
+				DEBUG_TRACE_LOW(
+					"Incomplete embedded UDP header\n");
 				return 0;
 			}
 
@@ -3240,7 +3260,8 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 				si->packets_not_forwarded++;
 				spin_unlock_bh(&si->lock);
 
-				DEBUG_TRACE("Incomplete embedded TCP header\n");
+				DEBUG_TRACE_LOW(
+					"Incomplete embedded TCP header\n");
 				return 0;
 			}
 
@@ -3255,7 +3276,8 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("Unhandled embedded IP protocol: %u\n", icmp_iph->protocol);
+			DEBUG_TRACE_LOW("Unhandled embedded IP protocol: %u\n",
+				icmp_iph->protocol);
 			return 0;
 	}
 
@@ -3277,7 +3299,7 @@ static int sfe_ipv4_recv_icmp(struct sfe_ipv4 *si, struct sk_buff *skb, struct n
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("no connection found\n");
+		DEBUG_TRACE_LOW("no connection found\n");
 		return 0;
 	}
 
@@ -3323,7 +3345,7 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("len: %u is too short\n", len);
+		DEBUG_TRACE_LOW("len: %u is too short\n", len);
 		return 0;
 	}
 
@@ -3344,8 +3366,9 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("One of tot_len: %u, len: %u, header: %u not valid\n",
-				tot_len, len, iph->version);
+		DEBUG_TRACE_LOW(
+			"One of tot_len: %u, len: %u, header: %u not valid\n",
+			tot_len, len, iph->version);
 		return 0;
 	}
 
@@ -3359,7 +3382,7 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("non-initial fragment\n");
+		DEBUG_TRACE_LOW("non-initial fragment\n");
 		return 0;
 	}
 
@@ -3381,7 +3404,9 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
 
-			DEBUG_TRACE("len: %u is too short for header of size: %u\n", len, ihl);
+			DEBUG_TRACE_LOW(
+				"len: %u is too short for header of size: %u\n",
+				len, ihl);
 			return 0;
 		}
 
@@ -3411,7 +3436,7 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 	si->packets_not_forwarded++;
 	spin_unlock_bh(&si->lock);
 
-	DEBUG_TRACE("not UDP, TCP or ICMP: %u\n", protocol);
+	DEBUG_TRACE_LOW("not UDP, TCP or ICMP: %u\n", protocol);
 	return 0;
 }
 
@@ -3792,7 +3817,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	   Aggreagtion is enabled for the reply packet.*/
 	else if ((strncmp(src_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0))
 	{
-		pr_debug("\nSource Device is WLAN0 !!!");
+		IPC_DEBUG("Source Device is WLAN0 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 		reply_cm->do_aggr = aggr_on;
@@ -3800,7 +3825,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	}
 	else if ((strncmp(src_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
 	{
-		pr_debug("\nSource Device is WLAN1 !!!");
+		IPC_DEBUG("Source Device is WLAN1 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 		reply_cm->do_aggr = aggr_on;
@@ -3808,7 +3833,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	}
 	else if ((strncmp(src_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 ))
 	{
-		pr_debug("\nSource Device is WLAN2 !!!");
+		IPC_DEBUG("Source Device is WLAN2 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 		reply_cm->do_aggr = aggr_on;
@@ -3816,7 +3841,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	}
 	else if ((strncmp(src_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
 	{
-		pr_debug("\nSource Device is WLAN3 !!!");
+		IPC_DEBUG("Source Device is WLAN3 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 		reply_cm->do_aggr = aggr_on;
@@ -3907,7 +3932,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	/*
 	 * We have everything we need!
 	 */
-	pr_debug("new connection - mark: %08x, p: %d\n"
+	IPC_DEBUG("new connection - mark: %08x, p: %d\n"
 		"  s: %s:%pM(%pM):%pI4(%pI4):%u(%u)\n"
 		"  d: %s:%pM(%pM):%pI4(%pI4):%u(%u)\n",
 	sic->mark, sic->protocol,
@@ -3943,7 +3968,8 @@ void sfe_ipv4_destroy_rule(struct sfe_connection_destroy *sid)
 		si->connection_destroy_misses++;
 		spin_unlock_bh(&si->lock);
 
-		DEBUG_TRACE("connection does not exist - p: %d, s: %pI4:%u, d: %pI4:%u\n",
+		DEBUG_TRACE_LOW(
+			"connection does not exist - p: %d, s: %pI4:%u, d: %pI4:%u\n",
 				sid->protocol, &sid->src_ip, ntohs(sid->src_port),
 				&sid->dest_ip, ntohs(sid->dest_port));
 		return;
@@ -3999,6 +4025,94 @@ static ssize_t sfe_ipv4_get_debug_dev(struct device *dev,
  */
 static const struct device_attribute sfe_ipv4_debug_dev_attr =
 __ATTR(debug_dev, 0664, sfe_ipv4_get_debug_dev, NULL);
+
+/*
+ * sfe_ipv4_debug_level_show
+ * dump the current debug level value
+ */
+static ssize_t sfe_ipv4_debug_level_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", debug_level);
+}
+
+/*
+ * sfe_ipv4_debug_level_store
+ * change the debug level value by valu provided by user
+ */
+static ssize_t sfe_ipv4_debug_level_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	int tmp = 0;
+
+	if (sscanf(buf, "%du", &tmp) < 0)
+		pr_err("sscanf failed\n");
+	else
+		debug_level = tmp;
+	return count;
+}
+
+/*
+ * sysfs attributes.
+ */
+static const struct device_attribute sfe_debug_level =
+__ATTR(debug_level, 0660,
+	sfe_ipv4_debug_level_show, sfe_ipv4_debug_level_store);
+
+/*
+ * sfe_ipv4_debug_level_low_show
+ * dump the current value
+ */
+static ssize_t sfe_ipv4_debug_level_low_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", sfe_v4_enable_ipc_low);
+}
+
+/*
+ * sfe_ipv4_debug_level_low_store
+ * Enable/disable sfe ipv4 low level logging
+ */
+static ssize_t sfe_ipv4_debug_level_low_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	int tmp = 0;
+
+	if (sscanf(buf, "%du", &tmp) < 0)
+		pr_err("sscanf failed\n");
+	else {
+		if (tmp) {
+			if (!ipc_sfe_log_ctxt_low) {
+				ipc_sfe_log_ctxt_low =
+						ipc_log_context_create(
+						IPCLOG_STATE_PAGES,
+						"sfe_ipv4_low",
+						0);
+			}
+			if (!ipc_sfe_log_ctxt_low) {
+				pr_err("failed to create ipc sfe low context\n");
+				return -EFAULT;
+			}
+		} else {
+			if (ipc_sfe_log_ctxt_low)
+				ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
+				ipc_sfe_log_ctxt_low = NULL;
+		}
+	}
+	sfe_v4_enable_ipc_low = tmp;
+	return count;
+}
+
+
+/*
+ * sysfs attributes.
+ */
+static const struct device_attribute sfe_debug_level_low =
+__ATTR(sfe_v4_enable_ipc_low, 0660,
+	sfe_ipv4_debug_level_low_show, sfe_ipv4_debug_level_low_store);
+
 
 /*
  * reset  sfe aggr parametes
@@ -4765,6 +4879,13 @@ static int __init sfe_ipv4_init(void)
 	struct sfe_ipv4 *si = &__si;
 	int result = -1;
 
+	ipc_sfe_log_ctxt = ipc_log_context_create(IPCLOG_STATE_PAGES,
+							"sfe_ipv4", 0);
+	if (!ipc_sfe_log_ctxt)
+		pr_err("error creating logging context for sfe ipv4 connection\n");
+	else
+		pr_info("IPC logging has been enabled for sfe ipv4 connection\n");
+
 	DEBUG_INFO("SFE IPv4 init\n");
 
 	/*register proc sys*/
@@ -4797,6 +4918,27 @@ static int __init sfe_ipv4_init(void)
 	result = sysfs_create_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_dev_attr.attr);
 	if (result) {
 		DEBUG_ERROR("failed to register debug dev file: %d\n", result);
+		goto exit4;
+	}
+
+	/*
+	 * Create sys/sfe_ipv4/debug_level
+	 */
+	result = sysfs_create_file(si->sys_sfe_ipv4, &sfe_debug_level.attr);
+	if (result) {
+		DEBUG_ERROR("failed debug level file: %d for ipv4 connection\n",
+			result);
+		goto exit4;
+	}
+
+	/*
+	 * Create sys/sfe_ipv4/sfe_v4_enable_ipc_low
+	 */
+	result = sysfs_create_file(si->sys_sfe_ipv4, &sfe_debug_level_low.attr);
+	if (result) {
+		DEBUG_ERROR(
+			"failed debug level low file: %d for ipv4 connection\n",
+			result);
 		goto exit4;
 	}
 
@@ -4902,6 +5044,11 @@ static void __exit sfe_ipv4_exit(void)
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_dev_attr.attr);
 
 	kobject_put(si->sys_sfe_ipv4);
+	if (ipc_sfe_log_ctxt != NULL)
+		ipc_log_context_destroy(ipc_sfe_log_ctxt);
+
+	if (ipc_sfe_log_ctxt_low != NULL)
+		ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
 
 }
 
