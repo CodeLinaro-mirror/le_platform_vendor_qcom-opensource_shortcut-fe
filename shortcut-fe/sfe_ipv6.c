@@ -3355,7 +3355,7 @@ int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 		flush_on_find = true;
 		next_hdr = ext_hdr->next_hdr;
 	}
-	if (unlikely(sfe_tcpdump_enable)) {
+	if (unlikely(tcpdump_enable)) {
 		sfe_tcpdump_log(skb,pt_prev);
 	}
 	if (IPPROTO_TCP == next_hdr) {
@@ -4173,7 +4173,7 @@ static bool sfe_ipv6_debug_dev_read_start(struct sfe_ipv6 *si, char *buffer, cha
 
 	si->debug_read_seq++;
 
-	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "<sfe_ipv6>\n");
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "<dp_opt_ipv6>\n");
 	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE)) {
 		return false;
 	}
@@ -4496,7 +4496,7 @@ static bool sfe_ipv6_debug_dev_read_end(struct sfe_ipv6 *si, char *buffer, char 
 {
 	int bytes_read;
 
-	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "</sfe_ipv6>\n");
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "</dp_opt_ipv6>\n");
 	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE)) {
 		return false;
 	}
