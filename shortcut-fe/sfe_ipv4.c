@@ -68,7 +68,8 @@ static struct ctl_table sfe_sysctl_debug[] =
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold_count", &threshold_count),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "timeout_count", &timeout_count),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "skip_mtu_check", &skip_mtu_check),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG,"sfe_tcpdump_enable",&sfe_tcpdump_enable),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG,
+				"tcpdump_enable", &tcpdump_enable),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "packet_stats_on", &packet_stats_enabled),
 	{0, },
 };
@@ -3389,9 +3390,8 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 
 	protocol = iph->protocol;
 	/* send to tcpdump before processing on the basis of protocol */
-	if (unlikely(sfe_tcpdump_enable)) {
+	if (unlikely(tcpdump_enable))
 		sfe_tcpdump_log(skb,pt_prev);
-	}
 
 	if (IPPROTO_TCP == protocol) {
 		return sfe_ipv4_recv_tcp(si, skb, dev, len, iph, ihl, flush_on_find);
@@ -4221,7 +4221,7 @@ static bool sfe_ipv4_debug_dev_read_start(struct sfe_ipv4 *si, char *buffer, cha
 
 	si->debug_read_seq++;
 
-	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "<sfe_ipv4>\n");
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "<dp_opt_ipv4>\n");
 	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE)) {
 		return false;
 	}
@@ -4544,7 +4544,7 @@ static bool sfe_ipv4_debug_dev_read_end(struct sfe_ipv4 *si, char *buffer, char 
 {
 	int bytes_read;
 
-	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "</sfe_ipv4>\n");
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "</dp_opt_ipv4>\n");
 	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE)) {
 		return false;
 	}

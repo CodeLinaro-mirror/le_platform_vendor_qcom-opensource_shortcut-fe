@@ -168,7 +168,7 @@ struct sfe_connection_mark {
 };
 
 /*Common API for sfe tcpdump enablement */
-static int sfe_tcpdump_enable = 1;
+static int tcpdump_enable = 1;
 static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_prev)
 {
     struct net_device *dev;
