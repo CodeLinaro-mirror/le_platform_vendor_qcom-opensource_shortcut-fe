@@ -171,14 +171,16 @@ struct sfe_connection_mark {
 static int sfe_tcpdump_enable = 1;
 static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_prev)
 {
-    struct net_device *dev;
-    dev = skb->dev;
-    int ret;
-    if (pt_prev) {
-        atomic_inc(&skb->users);
-        ret = pt_prev->func(skb, skb->dev, pt_prev, dev);
-    }
-    return ret;
+	struct net_device *dev;
+
+	dev = skb->dev;
+	int ret = true;
+
+	if (pt_prev) {
+		atomic_inc(&skb->users);
+		ret = pt_prev->func(skb, skb->dev, pt_prev, dev);
+	}
+	return ret;
 }
 
 /*
