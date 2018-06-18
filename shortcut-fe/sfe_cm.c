@@ -269,13 +269,16 @@ static void sfe_cm_delete_conntrack (struct nf_conn *ct)
  * structure, obtain the hardware address.  This means this function also
  * works if the neighbours are routers too.
  */
-static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr, struct net_device **dev, uint8_t *mac_addr, int is_v4)
+static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr,
+			struct net_device **dev,
+			uint8_t *mac_addr, int is_v4, uint32_t mark)
 {
 	struct neighbour *neigh;
 	struct rtable *rt;
 	struct rt6_info *rt6;
 	struct dst_entry *dst;
 	struct net_device *mac_dev;
+	struct flowi4 flp4;
 
 	/*
 	 * Look up the rtable entry for the IP address then get the hardware
@@ -283,7 +286,10 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr, struct net_device 
 	 * neighbours are routers too.
 	 */
 	if (likely(is_v4)) {
-		rt = ip_route_output(&init_net, addr->ip, 0, 0, 0);
+		memset(&flp4, 0, sizeof(struct flowi4));
+		flp4.daddr = addr->ip;
+		flp4.flowi4_mark = mark;
+		rt = ip_route_output_key(&init_net, &flp4);
 		if (unlikely(IS_ERR(rt))) {
 			goto ret_fail;
 		}
@@ -521,6 +527,9 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	}
 
 	sic.flags = 0;
+#if defined(CONFIG_NF_CONNTRACK_MARK)
+	sic.mark = ct->mark;
+#endif
 
 	switch (sic.protocol) {
 	case IPPROTO_TCP:
@@ -608,27 +617,31 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * Get the net device and MAC addresses that correspond to the various source and
 	 * destination host addresses.
 	 */
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip, &src_dev, sic.src_mac, is_v4)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip, &src_dev,
+					sic.src_mac, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_DEV);
 		return NF_ACCEPT;
 	}
 	src_dev_use = src_dev;
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip_xlate, &dev, sic.src_mac_xlate, is_v4)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip_xlate, &dev,
+					sic.src_mac_xlate, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_XLATE_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip, &dev, sic.dest_mac, is_v4)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip, &dev,
+					sic.dest_mac, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip_xlate, &dest_dev, sic.dest_mac_xlate, is_v4)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip_xlate, &dest_dev,
+					sic.dest_mac_xlate, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_XLATE_DEV);
 		goto done1;
 	}
