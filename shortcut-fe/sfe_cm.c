@@ -435,11 +435,13 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	/*
 	 * Don't process untracked connections.
 	 */
+#ifndef ISKERNEL4_14
 	if (unlikely(ct == &nf_conntrack_untracked)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_CT_NO_TRACK);
 		DEBUG_TRACE("untracked connection\n");
 		return NF_ACCEPT;
 	}
+#endif
 
 	/*
 	 * Unconfirmed connection may be dropped by Linux at the final step,
@@ -738,7 +740,7 @@ done1:
 }
 
 
-#ifdef ISTARGETPOORWILLS
+#ifdef ISKERNELUPGRADED
 /*
  * sfe_cm_ipv4_post_routing_hook()
  *	Called for packets about to leave the box - either locally generated or forwarded from another interface
@@ -867,7 +869,7 @@ static int sfe_cm_conntrack_event(unsigned int events, struct nf_ct_event *item)
 static struct nf_hook_ops sfe_cm_ops_post_routing[] __read_mostly = {
 	{
 		.hook = __sfe_cm_ipv4_post_routing_hook,
-#ifndef ISTARGETPOORWILLS
+#ifndef ISKERNELUPGRADED
 		.owner = THIS_MODULE,
 #endif
 		.pf = NFPROTO_IPV4,
@@ -877,7 +879,7 @@ static struct nf_hook_ops sfe_cm_ops_post_routing[] __read_mostly = {
 #ifdef SFE_SUPPORT_IPV6
 	{
 		.hook = __sfe_cm_ipv6_post_routing_hook,
-#ifndef ISTARGETPOORWILLS
+#ifndef ISKERNELUPGRADED
 		.owner = THIS_MODULE,
 #endif
 		.pf = NFPROTO_IPV6,
@@ -930,7 +932,7 @@ static void sfe_cm_sync_rule(struct sfe_connection_sync *sis)
 	/*
 	 * Look up conntrack connection
 	 */
-#ifdef ISTARGETPOORWILLS
+#ifdef ISKERNELUPGRADED
 	h = nf_conntrack_find_get(&init_net, NF_CT_DEFAULT_ZONE_ID, &tuple);
 #else
 	h = nf_conntrack_find_get(&init_net, NF_CT_DEFAULT_ZONE, &tuple);
@@ -942,7 +944,7 @@ static void sfe_cm_sync_rule(struct sfe_connection_sync *sis)
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
 
-#ifndef ISTARGETPOORWILLS
+#ifndef ISKERNELUPGRADED
 	NF_CT_ASSERT(ct->timeout.data == (unsigned long)ct);
 #endif
 	/*
@@ -950,7 +952,7 @@ static void sfe_cm_sync_rule(struct sfe_connection_sync *sis)
 	 */
 	if (!test_bit(IPS_FIXED_TIMEOUT_BIT, &ct->status)) {
 		spin_lock_bh(&ct->lock);
-#ifdef ISTARGETPOORWILLS
+#ifdef ISKERNELUPGRADED
 		ct->timeout += sis->delta_jiffies;
 #else
 		ct->timeout.expires += sis->delta_jiffies;
@@ -1107,7 +1109,12 @@ static int __init sfe_cm_init(void)
 	/*
 	 * Register our netfilter hooks.
 	 */
+#ifdef ISKERNEL4_14
+	result = nf_register_net_hooks(NULL,
+		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#else
 	result = nf_register_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#endif
 	if (result < 0) {
 		DEBUG_ERROR("can't register nf post routing hook: %d\n", result);
 		goto exit3;
@@ -1182,7 +1189,12 @@ static void __exit sfe_cm_exit(void)
 	sfe_ipv4_destroy_all_rules_for_dev(NULL);
 	sfe_ipv6_destroy_all_rules_for_dev(NULL);
 
+#ifdef ISKERNEL4_14
+	nf_unregister_net_hooks(NULL,
+		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#else
 	nf_unregister_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#endif
 
 	unregister_inet6addr_notifier(&sc->inet6_notifier);
 	unregister_inetaddr_notifier(&sc->inet_notifier);
