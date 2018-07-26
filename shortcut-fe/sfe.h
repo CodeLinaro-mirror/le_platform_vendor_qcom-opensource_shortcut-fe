@@ -28,6 +28,7 @@
 #define SFE_HOOK_ABOVE_BRIDGE 0
 #define MAX_INTF_LEN 50
 #define SFE_MAX_CMD_LEN 100
+#define SFE_CONFIG_MARK 1
 
 #define WLAN_INTF_LEN 5
 #define ECM_INTF_LEN 4
