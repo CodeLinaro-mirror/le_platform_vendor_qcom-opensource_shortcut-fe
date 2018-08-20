@@ -16,6 +16,15 @@
 SFE_SUPPORT_IPV6 = IPV6
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 DEBUG_CFLAGS = -g
+KVER = $(KERNEL_VERSION)
+
+ifeq ($(KVER),$(filter 4.9%,$(KVER)))
+ccflags-y += -DISKERNELUPGRADED
+endif
+
+ifeq ($(KVER),$(filter 4.14%,$(KVER)))
+ccflags-y += -DISKERNELUPGRADED -DISKERNEL4_14
+endif
 obj-m += shortcut-fe.o
 
 ifdef SFE_SUPPORT_IPV6

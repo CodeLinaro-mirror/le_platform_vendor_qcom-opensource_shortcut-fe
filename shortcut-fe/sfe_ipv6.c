@@ -31,14 +31,12 @@
 
 #define PKT_THRESHOLD 10
 #define TIMEOUT 100
-#define AGGR_ON 1
 #define PACKETS_STATS_ENABLED 0
 
 struct sfe_wlan_aggr_params aggr_params[MAX_WLAN_INDEX];
 
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
-int aggr_on = AGGR_ON;
 int threshold_count;
 int timeout_count;
 bool iface;
@@ -66,11 +64,10 @@ static struct ctl_table sfe_sysctl_debug[] =
 {
 	XDBG_ADD_PROC_ENTRY(XDBG_TIMER_STEP_DBG, "v6_timeout_value", &var_timeout),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "v6_threshold", &var_thresh),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "v6_aggr_on", &aggr_on),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "v6_threshold_count", &threshold_count),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "v6_timeout_count", &timeout_count),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "packet_stats_on", &packet_stats_enabled),
-	{0, },
+	{},
 };
 
 static int sfe_v6_enable_ipc_low;
@@ -2458,89 +2455,17 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	 */
 	prefetch(skb_shinfo(skb));
 
-	/*
-	 * Send the packet on its way.
-	 */
-
-	/*
-	 * do _aggr is set to true in case we need aggregation to happen
-	 */
-	if (cm->do_aggr)
-	{
-		IPC_DEBUG_LOW("UDP_v6-Downlink");
-
-		/*
-		 * Mark that this packet has been fast forwarded.
-		 */
-		skb->fast_forwarded = 1;
-
-		/* DownLink: skb pkt aggregation. */
-		new_skb=skb;
-		new_skb->next =NULL;
-
-		/* Update WLAN Queue index and priority. */
-		ops = xmit_dev->netdev_ops;
-		if (ops->ndo_select_queue)
-			queue_index = ops->ndo_select_queue(xmit_dev, skb, NULL,
-					NULL);
-		skb_set_queue_mapping(skb, queue_index);
-
-		/* Check if the Threshold is reached*/
-		if (aggr_params[cm->index].curr_dl_skb_num == (var_thresh - 1))
-		{
-			if (aggr_params[cm->index].skb_tail)
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-			threshold_count++;
-
-			if(aggr_params[cm->index].skb_head)
-				dev_queue_xmit_list(aggr_params[cm->index].skb_head);
-			else
-				dev_queue_xmit(new_skb);
-			IPC_DEBUG_LOW("Packet in List: %d ",
-				aggr_params[cm->index].curr_dl_skb_num);
-
-			/* Reset the params. */
-			aggr_params[cm->index].curr_dl_skb_num = 0;
-			aggr_params[cm->index].skb_head = NULL;
-			aggr_params[cm->index].skb_tail = NULL;
-
-			return 1;
-		}
-		else
-		{
-			/* skb head is null for the first packet*/
-			if(aggr_params[cm->index].skb_head == NULL)
-			{
-				aggr_params[cm->index].skb_head = new_skb;
-				aggr_params[cm->index].skb_tail = new_skb;
-				init_timer_module(cm->index);
-			}
-			else
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-			aggr_params[cm->index].curr_dl_skb_num ++;
-
-			return 1;
+	IPC_DEBUG_LOW("UDP_v6-Uplink. No Aggregation. ");
+	if (cm->pad_removal_require) {
+		skb_trim_len = ntohs(iph->payload_len) +
+						sizeof(struct sfe_ipv6_ip_hdr);
+		if (pskb_trim_rcsum(skb, skb_trim_len +
+			trim_len)) {
+			DEBUG_TRACE_LOW("padding removal failed\n");
 		}
 	}
-	else
-	{
-		IPC_DEBUG_LOW("UDP_v6-Uplink. No Aggregation. ");
-		if (cm->pad_removal_require) {
-			skb_trim_len=ntohs(iph->payload_len)+sizeof(struct sfe_ipv6_ip_hdr);
-			if (pskb_trim_rcsum(skb, skb_trim_len +
-				trim_len)) {
-				DEBUG_TRACE_LOW("padding removal failed\n");
-			}
-		}
-		dev_queue_xmit(skb);
-		return 1;
-	}
+	dev_queue_xmit(skb);
+	return 1;
 }
 
 /*
@@ -3101,83 +3026,14 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	 * Send the packet on its way.
 	 */
 
-	/*
-	 * do _aggr is set to true in case we need aggregation to happen
-	 */
-	if ( cm->do_aggr)
-	{
-		IPC_DEBUG_LOW("TCP_v6-Downlink");
-
-		/*
-		 * Mark that this packet has been fast forwarded.
-		 */
-		skb->fast_forwarded = 1;
-
-		/*DownLink: skb pkt aggregation*/
-		new_skb=skb;
-		new_skb->next =NULL;
-
-		/* Update WLAN Queue index and priority. */
-		ops = xmit_dev->netdev_ops;
-		if (ops->ndo_select_queue)
-			queue_index = ops->ndo_select_queue(xmit_dev, skb, NULL,
-					NULL);
-		skb_set_queue_mapping(skb, queue_index);
-
-		/* Check if the Threshold is reached*/
-		if (aggr_params[cm->index].curr_dl_skb_num == var_thresh- 1)
-		{
-			if (aggr_params[cm->index].skb_tail)
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-			threshold_count++;
-
-			IPC_DEBUG_LOW("Packet in List: %d ",
-				aggr_params[cm->index].curr_dl_skb_num);
-			if(aggr_params[cm->index].skb_head)
-				dev_queue_xmit_list(aggr_params[cm->index].skb_head);
-			else
-				dev_queue_xmit(new_skb);
-
-			/* Reset the params. */
-			aggr_params[cm->index].curr_dl_skb_num = 0;
-			aggr_params[cm->index].skb_head = NULL;
-			aggr_params[cm->index].skb_tail = NULL;
-
-			return 1;
-		}
-		else
-		{
-			/* skb head is null for the first packet*/
-			if(aggr_params[cm->index].skb_head == NULL)
-			{
-				aggr_params[cm->index].skb_head = new_skb;
-				aggr_params[cm->index].skb_tail = new_skb;
-				init_timer_module(cm->index);
-			}
-			else
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-			aggr_params[cm->index].curr_dl_skb_num ++;
-
-			return 1;
-		}
+	IPC_DEBUG_LOW("TCP_v6-UpLink. No Aggregation. ");
+	if (cm->pad_removal_require) {
+		if (pskb_trim_rcsum(skb, ntohs(iph->payload_len)+
+			sizeof(struct sfe_ipv6_ip_hdr)+trim_len))
+			DEBUG_TRACE_LOW("padding removal failed\n");
 	}
-	else
-	{
-		IPC_DEBUG_LOW("TCP_v6-UpLink. No Aggregation. ");
-		if (cm->pad_removal_require) {
-			if (pskb_trim_rcsum(skb, ntohs(iph->payload_len)+
-				sizeof(struct sfe_ipv6_ip_hdr)+trim_len))
-				DEBUG_TRACE_LOW("padding removal failed\n");
-		}
-		dev_queue_xmit(skb);
-		return 1;
-	}
+	dev_queue_xmit(skb);
+	return 1;
 }
 
 /*
@@ -3853,7 +3709,6 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	}
 	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0)) 
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX0;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
@@ -3863,21 +3718,18 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX1;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0))
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX2;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX3;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
@@ -3888,28 +3740,24 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	{
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX0;
 	}
 	else if ((strncmp(src_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
 	{
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX1;
 	}
 	else if((strncmp(src_dev->name, WLAN_INTF3,WLAN_INTF_LEN) == 0 ))
 	{
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX2;
 	}
 	else if((strncmp(src_dev->name, WLAN_INTF4,WLAN_INTF_LEN) == 0 ))
 	{
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX3;
 	}
 	else
@@ -4740,7 +4588,10 @@ static struct file_operations sfe_ipv6_debug_dev_fops = {
 	.release = sfe_ipv6_debug_dev_release
 };
 
-static int read_from_v6_iface_proc_entry(struct file *filp,char *buf,size_t count,loff_t *offp ) 
+static ssize_t
+read_from_v6_iface_proc_entry(
+				struct file *filp, char *buf,
+					size_t count, loff_t *offp)
 {
 	struct sfe_ipv6 *si = &__si6;
 

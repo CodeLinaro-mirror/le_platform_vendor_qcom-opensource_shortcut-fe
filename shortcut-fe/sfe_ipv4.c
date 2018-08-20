@@ -30,14 +30,12 @@
 #include "sfe_cm.h"
 #define PKT_THRESHOLD 10
 #define TIMEOUT 100
-#define AGGR_ON 1
 #define PACKETS_STATS_ENABLED 0
 
 struct sfe_wlan_aggr_params aggr_params[MAX_WLAN_INDEX];
 
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
-int aggr_on = AGGR_ON;
 int skip_mtu_check = 1;
 int threshold_count;
 int timeout_count;
@@ -65,13 +63,12 @@ static struct ctl_table sfe_sysctl_debug[] =
 {
 	XDBG_ADD_PROC_ENTRY(XDBG_TIMER_STEP_DBG, "timeout_value", &var_timeout),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold", &var_thresh),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "aggr_on", &aggr_on),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold_count", &threshold_count),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "timeout_count", &timeout_count),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "skip_mtu_check", &skip_mtu_check),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG,"sfe_tcpdump_enable",&sfe_tcpdump_enable),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "packet_stats_on", &packet_stats_enabled),
-	{0, },
+	{},
 };
 
 static int sfe_v4_enable_ipc_low;
@@ -2356,91 +2353,18 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 */
 	prefetch(skb_shinfo(skb));
 
+	IPC_DEBUG_LOW("UDP_v4-Uplink. No Aggregation.");
 	/*
-	 * Send the packet on its way.
+	 * Remove padding if require
 	 */
-
-	/*
-	 * do _aggr is set to true in case we need aggregation to happen
-	 */
-	if (cm->do_aggr)
-	{
-		IPC_DEBUG_LOW("UDP_v4-Dowlink");
-
-		/*
-		 * Mark that this packet has been fast forwarded.
-		 */
-		skb->fast_forwarded = 1;
-
-		/* skb pkt aggregation */
-		new_skb=skb;
-		new_skb->next =NULL;
-
-		/* Update WLAN Queue index and priority. */
-		ops = xmit_dev->netdev_ops;
-		if (ops->ndo_select_queue)
-			queue_index = ops->ndo_select_queue(xmit_dev, skb, NULL,
-					NULL);
-		skb_set_queue_mapping(skb, queue_index);
-
-		/* Check if the Threshold is reached*/
-		if (aggr_params[cm->index].curr_dl_skb_num == (var_thresh - 1))
-		{
-			if (aggr_params[cm->index].skb_tail)
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-			threshold_count++;
-
-			IPC_DEBUG_LOW("Packet in List: %d ",
-				aggr_params[cm->index].curr_dl_skb_num);
-			if(aggr_params[cm->index].skb_head)
-				dev_queue_xmit_list(aggr_params[cm->index].skb_head);
-			else
-				dev_queue_xmit(new_skb);
-
-			/* Reset the params. */
-			aggr_params[cm->index].curr_dl_skb_num = 0;
-			aggr_params[cm->index].skb_head = NULL;
-			aggr_params[cm->index].skb_tail = NULL;
-
-			return 1;
-		}
-		else
-		{
-			/* skb head is null for the first packet*/
-			if(aggr_params[cm->index].skb_head == NULL)
-			{
-				aggr_params[cm->index].skb_head = new_skb;
-				aggr_params[cm->index].skb_tail = new_skb;
-				init_timer_module(cm->index);
-			}
-			else
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-			aggr_params[cm->index].curr_dl_skb_num ++;
-
-			return 1;
+	if (cm->pad_removal_require) {
+		if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
+						trim_len)) {
+			DEBUG_TRACE_LOW("\n padding removal failed\n");
 		}
 	}
-	else
-	{
-		IPC_DEBUG_LOW("UDP_v4-Uplink. No Aggregation.");
-		/*
-		 * Remove padding if require
-		 */
-		if (cm->pad_removal_require) {
-			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
-							trim_len)) {
-				DEBUG_TRACE_LOW("\n padding removal failed\n");
-			}
-		}
-		dev_queue_xmit(skb);
-		return 1;
-	}
+	dev_queue_xmit(skb);
+	return 1;
 }
 
 /*
@@ -3025,95 +2949,19 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	/*
 	 * do _aggr is set to true in case we need aggregation to happen
 	 */
-	IPC_DEBUG_LOW("Aggregation Parameter value: %d", cm->do_aggr);
-	if ( cm->do_aggr)
-	{
-		IPC_DEBUG_LOW("TCP_v4-Dowlink");
-		/*
-		 * Check that our TCP data offset isn't too short
-		 */
-		data_offs = tcph->doff << 2;
-		close_aggr = ((len - sizeof(struct sfe_ipv4_ip_hdr) - data_offs) == 0) ? true : false;
-		IPC_DEBUG_LOW("close_aggr variable value: %d", close_aggr);
+	IPC_DEBUG_LOW("TCP_v4-UPLINK. No Aggregation.");
 
-		/*
-		 * Mark that this packet has been fast forwarded.
-		 */
-		skb->fast_forwarded = 1;
-
-		new_skb=skb;
-		new_skb->next =NULL;
-
-		/* Update WLAN Queue index and priority. */
-		ops = xmit_dev->netdev_ops;
-		if (ops->ndo_select_queue)
-			queue_index = ops->ndo_select_queue(xmit_dev, skb, NULL,
-					NULL);
-		skb_set_queue_mapping(skb, queue_index);
-
-		/* Check if the Threshold is reached  or the next packet is TCP Ack.*/
-		if ((aggr_params[cm->index].curr_dl_skb_num == (var_thresh- 1)) || close_aggr)
-		{
-			if (aggr_params[cm->index].skb_tail)
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-
-			threshold_count++;
-
-			IPC_DEBUG_LOW("Total Packet in List: %d ",
-				aggr_params[cm->index].curr_dl_skb_num);
-			if(aggr_params[cm->index].skb_head)
-				dev_queue_xmit_list(aggr_params[cm->index].skb_head);
-			else
-				dev_queue_xmit(new_skb);
-
-			/* Reset the params. */
-			aggr_params[cm->index].curr_dl_skb_num = 0;
-			aggr_params[cm->index].skb_head = NULL;
-			aggr_params[cm->index].skb_tail = NULL;
-
-			return 1;
-		}
-		else
-		{
-			/* skb head is null for the first packet*/
-			if(aggr_params[cm->index].skb_head == NULL)
-			{
-				aggr_params[cm->index].skb_head = new_skb;
-				aggr_params[cm->index].skb_tail = new_skb;
-				init_timer_module(cm->index);
-			}
-			else
-			{
-				aggr_params[cm->index].skb_tail->next = new_skb;
-				aggr_params[cm->index].skb_tail = aggr_params[cm->index].skb_tail->next;
-			}
-			aggr_params[cm->index].curr_dl_skb_num ++;
-
-			IPC_DEBUG_LOW("Queing packets in the list",
-				cm->do_aggr);
-
-			return 1;
+	/*
+	 * Remove padding if require
+	 */
+	if (cm->pad_removal_require) {
+		if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
+					trim_len)) {
+			DEBUG_TRACE_LOW("\n padding removal failed\n");
 		}
 	}
-	else
-	{
-		IPC_DEBUG_LOW("TCP_v4-UPLINK. No Aggregation.");
-
-		/*
-		 * Remove padding if require
-		 */
-		if (cm->pad_removal_require) {
-			if (pskb_trim_rcsum(skb, ntohs(iph->tot_len) +
-						trim_len)) {
-				DEBUG_TRACE_LOW("\n padding removal failed\n");
-			}
-		}
-		dev_queue_xmit(skb);
-		return 1;
-	}
+	dev_queue_xmit(skb);
+	return 1;
 }
 
 /*
@@ -3786,28 +3634,24 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	/* If the packet destination is wlan0 or wlan1 or wlan2 or wlan3, do aggregation*/
 	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0))
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX0;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX1;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0))
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX2;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
 	}
 	else if ((strncmp(dest_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
 	{
-		original_cm->do_aggr = aggr_on;
 		original_cm->index = SFE_WLAN_LINK_INDEX3;
 		reply_cm->do_aggr = false;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;
@@ -3820,7 +3664,6 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		IPC_DEBUG("Source Device is WLAN0 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX0;
 	}
 	else if ((strncmp(src_dev->name, WLAN_INTF2, WLAN_INTF_LEN)  == 0 ))
@@ -3828,7 +3671,6 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		IPC_DEBUG("Source Device is WLAN1 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX1;
 	}
 	else if ((strncmp(src_dev->name, WLAN_INTF3, WLAN_INTF_LEN)  == 0 ))
@@ -3836,7 +3678,6 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		IPC_DEBUG("Source Device is WLAN2 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX2;
 	}
 	else if ((strncmp(src_dev->name, WLAN_INTF4, WLAN_INTF_LEN)  == 0 ))
@@ -3844,7 +3685,6 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		IPC_DEBUG("Source Device is WLAN3 !!!");
 		original_cm->do_aggr = false;
 		original_cm->index = SFE_WLAN_LINK_INDEX_NONE;
-		reply_cm->do_aggr = aggr_on;
 		reply_cm->index = SFE_WLAN_LINK_INDEX3;
 	}
 	else

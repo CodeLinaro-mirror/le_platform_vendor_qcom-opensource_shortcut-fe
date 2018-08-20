@@ -17,7 +17,7 @@
 
 #include <linux/version.h>
 
-#ifdef ISTARGETPOORWILLS
+#ifdef ISKERNELUPGRADED
 #define sfe_cm_ipv4_post_routing_hook(PRIV, SKB, STATE) \
 static unsigned int __sfe_cm_ipv4_post_routing_hook(void *PRIV, \
 						struct sk_buff *SKB, \
