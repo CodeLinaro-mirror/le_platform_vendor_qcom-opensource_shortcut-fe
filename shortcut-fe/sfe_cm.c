@@ -1110,7 +1110,7 @@ static int __init sfe_cm_init(void)
 	 * Register our netfilter hooks.
 	 */
 #ifdef ISKERNEL4_14
-	result = nf_register_net_hooks(NULL,
+	result = nf_register_net_hooks(&init_net,
 		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
 #else
 	result = nf_register_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
@@ -1190,7 +1190,7 @@ static void __exit sfe_cm_exit(void)
 	sfe_ipv6_destroy_all_rules_for_dev(NULL);
 
 #ifdef ISKERNEL4_14
-	nf_unregister_net_hooks(NULL,
+	nf_unregister_net_hooks(&init_net,
 		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
 #else
 	nf_unregister_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
