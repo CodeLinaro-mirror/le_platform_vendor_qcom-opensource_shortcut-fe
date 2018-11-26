@@ -49,16 +49,6 @@ typedef enum
 	SFE_WLAN_LINK_INDEX3 = 3
 }sfe_wlan_index_type;
 
-/* 
- * WLAN Aggregation params.
- */
-struct sfe_wlan_aggr_params
-{
-	struct sk_buff *skb_head;
-	struct sk_buff *skb_tail;
-	struct timer_list sfe_timer;
-	int curr_dl_skb_num;
-};
 
 /*
  * connection creation structure.
