@@ -27,6 +27,7 @@
  */
 
 #include <linux/ipc_logging.h>
+#include <linux/cdev.h>
 
 #define SFE_HOOK_ABOVE_BRIDGE 0
 #define MAX_INTF_LEN 50
@@ -58,6 +59,15 @@
 #define DEBUG_LEVEL 2
 static void *ipc_sfe_log_ctxt;
 static void *ipc_sfe_log_ctxt_low;
+
+/*
+ * L2TP variables for IPV6
+ */
+int l2tp_ipv6_check = 1;
+#define MAX_IFACE_NAME_SIZE 16
+#define L2TP_IPV6_ADDR_LEN 16
+#define SFE_L2TP_SESSION_MAX 3
+#define MAX_SUPPORTED_IF_CONFIG 3
 
 enum {
 	ERROR_LEVEL = 1,

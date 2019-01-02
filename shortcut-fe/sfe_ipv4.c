@@ -238,6 +238,7 @@ struct sfe_ipv4_connection_match {
 	struct sfe_ipv4_connection_match *active_prev;
 	/* Pointer to the previous connection in the active list */
 	bool active;			/* Flag to indicate if we're on the active list */
+	bool l2tp_traffic;
 
 	/*
 	 * Characteristics that identify flows that match this rule.
@@ -2068,10 +2069,14 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 		si->exception_events[SFE_IPV4_EXCEPTION_EVENT_UDP_NO_CONNECTION]++;
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
-
+		DEBUG_TRACE_LOW("src_ip = %pI4 dst_ip = %pI4 dev = %s\n",
+						&src_ip, &dest_ip, dev->name);
 		DEBUG_TRACE_LOW("no connection found\n");
 		return 0;
 	}
+	DEBUG_TRACE_LOW("src_ip = %pI4 dst_ip = %pI4 dev = %s\n",
+					&src_ip, &dest_ip, dev->name);
+
 
 	/*
 	 * If our packet has beern marked as "flush on find" we can't actually
@@ -2479,13 +2484,17 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 			si->exception_events[SFE_IPV4_EXCEPTION_EVENT_TCP_NO_CONNECTION_FAST_FLAGS]++;
 			si->packets_not_forwarded++;
 			spin_unlock_bh(&si->lock);
-
+			DEBUG_TRACE_LOW(
+				"src_ip = %pI4 dst_ip = %pI4 dev = %s\n",
+				 &src_ip, &dest_ip, dev->name);
 			DEBUG_TRACE_LOW("no connection found - fast flags\n");
 			return 0;
 		}
 		si->exception_events[SFE_IPV4_EXCEPTION_EVENT_TCP_NO_CONNECTION_SLOW_FLAGS]++;
 		si->packets_not_forwarded++;
 		spin_unlock_bh(&si->lock);
+		DEBUG_TRACE_LOW("src_ip = %pI4 dst_ip = %pI4 dev = %s\n",
+						&src_ip, &dest_ip, dev->name);
 
 		DEBUG_TRACE_LOW("no connection found - slow flags: 0x%x\n",
 				flags & (TCP_FLAG_SYN | TCP_FLAG_RST | TCP_FLAG_FIN | TCP_FLAG_ACK));
@@ -3219,7 +3228,6 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 	if (unlikely(sfe_tcpdump_enable)) {
 		sfe_tcpdump_log(skb,pt_prev);
 	}
-
 	if (IPPROTO_TCP == protocol) {
 		return sfe_ipv4_recv_tcp(si, skb, dev, len, iph, ihl, flush_on_find);
 	}
@@ -3329,10 +3337,10 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	struct sfe_ipv4_connection_match *reply_cm;
 	struct net_device *dest_dev;
 	struct net_device *src_dev;
+	struct net_device *parent_dev;
 	bool dest_dev_valid_for_pack_stats = false;
 	bool src_dev_valid_for_pack_stats = false;
 	struct sfe_ipv4_packet_stats_list *packet_list;
-
 
 	dest_dev = sic->dest_dev;
 	src_dev = sic->src_dev;
@@ -3411,13 +3419,32 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	}
 
 
+/* this function is for l2tp optimization */
+	if (sic->l2tp_traffic) {
+		DEBUG_TRACE_LOW("l2tp_traffic is enabled\n");
+		sfe_l2tp_find_parent_dev(
+			sic->src_dev->name,
+			sic->sfe_config_hash,
+			&(sic->parent_dev));
+		if (sic->parent_dev != NULL) {
+			parent_dev = sic->parent_dev;
+			original_cm->l2tp_traffic = true;
+		} else {
+			original_cm->l2tp_traffic = false;
+		}
+	}
 	/*
 	 * Fill in the "original" direction connection matching object.
 	 * Note that the transmit MAC address is "dest_mac_xlate" because
 	 * we always know both ends of a connection by their translated
 	 * addresses and not their public addresses.
 	 */
-	original_cm->match_dev = src_dev;
+
+	if (original_cm->l2tp_traffic)
+		original_cm->match_dev = parent_dev;
+	else
+		original_cm->match_dev = src_dev;
+
 	original_cm->match_protocol = sic->protocol;
 	original_cm->match_src_ip = sic->src_ip.ip;
 	original_cm->match_src_port = sic->src_port;
@@ -4592,7 +4619,6 @@ static int __init sfe_ipv4_init(void)
 		pr_info("IPC logging has been enabled for sfe ipv4 connection\n");
 
 	DEBUG_INFO("SFE IPv4 init\n");
-
 	/*register proc sys*/
 	si->proc.sfe_debug_ctl_path[0].procname = "debug";
 	si->proc.debug_root[0].procname = "sfe";

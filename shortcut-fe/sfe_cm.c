@@ -36,6 +36,8 @@
 #include "sfe_cm.h"
 #include "sfe_backport.h"
 
+#define NL_UNICAST_GRP 0
+
 typedef enum sfe_cm_exception {
 	SFE_CM_EXCEPTION_PACKET_BROADCAST,
 	SFE_CM_EXCEPTION_PACKET_MULTICAST,
@@ -79,6 +81,16 @@ static char *sfe_cm_exception_events_string[SFE_CM_EXCEPTION_MAX] = {
 	"LOCAL_OUT"
 };
 
+struct sock *nl_l2tp_sock;
+
+static void sfe_l2tp_nl_receive(struct sk_buff *skb);
+
+static struct netlink_kernel_cfg nl_l2tp_cfg = {
+	.input = sfe_l2tp_nl_receive,
+	.groups = NL_UNICAST_GRP,
+	.flags = 0,
+};
+
 /*
  * Per-module structure.
  */
@@ -114,6 +126,8 @@ extern void (*delete_sfe_entry)(struct nf_conn *ct);
  * Expose what should be a static flag in the TCP connection tracker.
  */
 extern int nf_ct_tcp_no_window_check;
+uint32_t gPID;
+
 /*
  * sfe_cm_incr_exceptions()
  *	increase an exception counter.
@@ -491,7 +505,6 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	orig_tuple = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
 	reply_tuple = ct->tuplehash[IP_CT_DIR_REPLY].tuple;
 	sic.protocol = (int32_t)orig_tuple.dst.protonum;
-
 	/*
 	 * Get addressing information, non-NAT first
 	 */
@@ -621,11 +634,13 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * Get the net device and MAC addresses that correspond to the various source and
 	 * destination host addresses.
 	 */
+
 	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip, &src_dev,
 					sic.src_mac, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_DEV);
 		return NF_ACCEPT;
 	}
+
 	src_dev_use = src_dev;
 
 	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip_xlate, &dev,
@@ -701,6 +716,22 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 		dest_dev_use = dest_br_dev;
 	}
 #endif
+	/*
+	 * L2TP optimizations over SFE
+	 * Here we pass the value of L2TP hashtable to
+	 * SFE_Connection and later create rules accordingly,
+	 * based on the configuration of l2tp passed from l2tp
+	 * netlink events
+	 */
+
+	if (l2tp_traffic) {
+		memcpy(
+			sic.sfe_config_hash,
+			sfe_l2tp_ht,
+			sizeof(sic.sfe_config_hash));
+		sic.l2tp_traffic = l2tp_traffic;
+		sic.parent_dev = NULL;
+	}
 
 	sic.src_dev = src_dev_use;
 	sic.dest_dev = dest_dev_use;
@@ -1061,6 +1092,76 @@ static ssize_t sfe_cm_get_exceptions(struct device *dev,
 	return len;
 }
 
+
+/* common api to add l2tp entry to hash array*/
+static inline void add_l2tp_entry_to_ht(struct sfe_l2tp_config *conf)
+{
+	sfe_l2tp_ht[conf->session_id].command = conf->command;
+
+	if (conf->session_id < 0 || conf->session_id > SFE_L2TP_MAX_CONF) {
+		DEBUG_INFO("session_id out of range\n");
+		return;
+	}
+	sfe_l2tp_ht[conf->session_id].session_id = conf->session_id;
+
+	strlcpy(
+		sfe_l2tp_ht[conf->session_id].l2tp_iface,
+		conf->l2tp_iface,
+		MAX_IFACE_NAME_SIZE);
+	strlcpy(
+		sfe_l2tp_ht[conf->session_id].parent_iface,
+		conf->parent_iface, MAX_IFACE_NAME_SIZE);
+
+	DEBUG_INFO(
+		"values of L2TP config l2tp_intf = %s, parent = %s\n",
+		sfe_l2tp_ht[conf->session_id].l2tp_iface,
+		sfe_l2tp_ht[conf->session_id].parent_iface);
+}
+
+
+static void sfe_l2tp_nl_receive(struct sk_buff *skb)
+{
+	struct nlmsghdr *nlheader;
+	struct sfe_l2tp_config *nl_l2tp_ptr = NULL;
+
+	nl_l2tp_ptr = kmalloc(sizeof(struct sfe_l2tp_config), GFP_KERNEL);
+
+	if (nl_l2tp_ptr == NULL) {
+		DEBUG_INFO("Cannot allocate memmory for NL msg\n");
+		return;
+	}
+
+	nlheader = (struct nlmsghdr *)skb->data;
+	memcpy(nl_l2tp_ptr, (struct sfe_l2tp_config *)
+			nlmsg_data(nlheader), sizeof(struct sfe_l2tp_config));
+	gPID = nlheader->nlmsg_pid;
+
+	if (sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id < 0 ||
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id >
+			SFE_L2TP_MAX_CONF) {
+		DEBUG_INFO("session_id out of range\n");
+		goto Free_nl_l2tp_ptr;
+	}
+
+	if (nl_l2tp_ptr->command == SFE_PASS_L2TP_CONFIG_TO_SFE) {
+		l2tp_traffic = true;
+		add_l2tp_entry_to_ht(nl_l2tp_ptr);
+	} else if (nl_l2tp_ptr->command == SFE_DEL_L2TP_CONFIG_FROM_SFE) {
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].command = 0;
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].local_tunnel_id = 0;
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id = 0;
+		memset(
+			sfe_l2tp_ht[nl_l2tp_ptr->session_id].parent_iface,
+			0,
+			MAX_IFACE_NAME_SIZE);
+		memset(
+			sfe_l2tp_ht[nl_l2tp_ptr->session_id].l2tp_iface,
+			0,
+			MAX_IFACE_NAME_SIZE);
+	}
+Free_nl_l2tp_ptr:
+	kfree(nl_l2tp_ptr);
+}
 /*
  * sysfs attributes.
  */
@@ -1119,7 +1220,16 @@ static int __init sfe_cm_init(void)
 		DEBUG_ERROR("can't register nf post routing hook: %d\n", result);
 		goto exit3;
 	}
+	nl_l2tp_sock =
+		netlink_kernel_create(
+			&init_net,
+			NL_L2TP_PROTO_ID,
+			&nl_l2tp_cfg);
 
+	if (!nl_l2tp_sock) {
+		DEBUG_ERROR("Error creating SFE L2TP NL socket");
+		goto exit3;
+	}
 	spin_lock_init(&sc->lock);
 
 	/*
@@ -1161,6 +1271,9 @@ static void __exit sfe_cm_exit(void)
 	struct sfe_cm *sc = &__sc;
 
 	DEBUG_INFO("SFE CM exit\n");
+
+	if (nl_l2tp_sock)
+		netlink_kernel_release(nl_l2tp_sock);
 
 	/*
 	 * Unregister our sync callback.

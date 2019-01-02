@@ -21,11 +21,17 @@
 #define SFE_CREATE_FLAG_NO_SEQ_CHECK 0x1
 					/* Indicates that we should not check sequence numbers */
 
-/*
+/*L2TP on SFE Flags
 */
 #ifndef SFE_SUPPORT_IPV6
 #define SFE_SUPPORT_IPV6
 #endif
+#define SFE_PASS_L2TP_CONFIG_TO_SFE 0xA0
+#define SFE_DEL_L2TP_CONFIG_FROM_SFE 0xA1
+#define L2TP_GENERIC_IFACE_NAME "l2tpeth"
+#define L2TP_ETH_MIN_LENGTH 7
+#define NL_L2TP_PROTO_ID 24
+#define SFE_L2TP_MAX_CONF 100
 
 /*
  * IPv6 address structure
@@ -49,6 +55,23 @@ typedef enum
 	SFE_WLAN_LINK_INDEX3 = 3
 }sfe_wlan_index_type;
 
+/*
+ * Data struct to represent L2TP Tunnel config.
+ */
+struct sfe_l2tp_config {
+	uint8_t command;
+	uint16_t local_tunnel_id;
+	/* local Tunnel ID*/
+
+	char parent_iface[MAX_IFACE_NAME_SIZE];
+	/* Local iface on which tunnel is created*/
+
+	char l2tp_iface[MAX_IFACE_NAME_SIZE];
+	uint16_t session_id;
+};
+
+static bool l2tp_traffic;
+static struct sfe_l2tp_config sfe_l2tp_ht[SFE_L2TP_MAX_CONF];
 
 /*
  * connection creation structure.
@@ -57,6 +80,7 @@ struct sfe_connection_create {
 	int protocol;
 	struct net_device *src_dev;
 	struct net_device *dest_dev;
+	struct net_device *parent_dev;
 	uint32_t flags;
 	uint32_t src_mtu;
 	uint32_t dest_mtu;
@@ -89,6 +113,8 @@ struct sfe_connection_create {
 	uint32_t dest_priority;
 	uint32_t src_dscp;
 	uint32_t dest_dscp;
+	bool l2tp_traffic;
+	struct sfe_l2tp_config sfe_config_hash[SFE_L2TP_MAX_CONF];
 };
 
 /*
@@ -157,6 +183,47 @@ struct sfe_connection_mark {
 	uint32_t mark;
 };
 
+static int extract_vlan_from_iface(char *str)
+{
+	int res = 0, i;
+
+	for (i = 0; str[i] != '\0'; ++i)
+		res = res * 10 + str[i] - '0';
+	return res;
+}
+
+static void sfe_l2tp_find_parent_dev
+(
+	char *source_intf_name,
+	struct sfe_l2tp_config *sfe_l2tp_ht,
+	struct net_device **src_dev
+)
+{
+	uint16_t session_idx;
+	bool isIntfL2tp;
+	char parent_iface[MAX_INTF_LEN];
+
+	isIntfL2tp = strncmp(
+			 source_intf_name,
+			 L2TP_GENERIC_IFACE_NAME,
+			 L2TP_ETH_MIN_LENGTH);
+	if (!isIntfL2tp) {
+		session_idx = (uint16_t)extract_vlan_from_iface(
+			&source_intf_name[L2TP_ETH_MIN_LENGTH]);
+		DEBUG_INFO(
+			"session_idx =%d, parent_iface = %s\n",
+			session_idx,
+			sfe_l2tp_ht[session_idx].parent_iface);
+
+		if ((session_idx >= 0 && session_idx < SFE_L2TP_MAX_CONF) &&
+			*(sfe_l2tp_ht[session_idx].parent_iface) != 0)
+			*src_dev =
+			dev_get_by_name(
+				&init_net,
+				sfe_l2tp_ht[session_idx].parent_iface);
+	}
+}
+
 /*Common API for sfe tcpdump enablement */
 static int sfe_tcpdump_enable = 1;
 static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_prev)
@@ -196,6 +263,12 @@ extern void sfe_ipv4_mark_rule(struct sfe_connection_mark *mark);
 /*
  * IPv6 APIs used by connection manager
  */
+extern int sfe_l2tp_ipv6_recv
+(
+	struct sk_buff *skb,
+	unsigned int ihl,
+	struct packet_type *pt_prev
+);
 extern int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_type *pt_prev);
 extern int sfe_ipv6_create_rule(struct sfe_connection_create *sic);
 extern void sfe_ipv6_destroy_rule(struct sfe_connection_destroy *sid);
