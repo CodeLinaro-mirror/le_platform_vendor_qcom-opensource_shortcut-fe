@@ -3222,9 +3222,6 @@ int sfe_l2tp_ipv6_recv(
 
 	optr = (skb->data);
 
-	session_id = ntohl(*((__be32 *) optr));
-	if (session_id < 0 || session_id > SFE_L2TP_SESSION_MAX)
-		return 0;
 
 	/*change the checksum value to NONE, as per L2TP*/
 	skb->ip_summed = CHECKSUM_NONE;
