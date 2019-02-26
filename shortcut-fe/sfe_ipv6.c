@@ -58,7 +58,7 @@ enum {
 	XDBG_MAX
 };
 
-static struct ctl_table sfe_sysctl_debug[] = 
+static struct ctl_table sfe_sysctl_debug[] =
 {
 	XDBG_ADD_PROC_ENTRY(XDBG_TIMER_STEP_DBG, "v6_timeout_value", &var_timeout),
 	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "v6_threshold", &var_thresh),
@@ -791,8 +791,6 @@ static void sfe_ipv6_remove_packet_stats_connection(struct sfe_ipv6_addr * clien
 {
 	struct sfe_ipv6 *si = &__si6;
 	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 	key = ht_conn_hash((unsigned long *) client_addr);
 
@@ -824,8 +822,6 @@ static void sfe_ipv6_remove_packet_stats_connection(struct sfe_ipv6_addr * clien
 static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct sfe_ipv6_packet_stats_list* node)
 {
 	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash((unsigned long *)
@@ -855,8 +851,6 @@ static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct 
 static bool sfe_ipv6_update_packet_stats_connection(struct sfe_ipv6* sic,struct sfe_ipv6_addr * client_addr, uint64_t rx_bytes, uint64_t tx_bytes )
 {
 	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash((unsigned long *)client_addr);
@@ -1102,8 +1096,9 @@ static bool sfe_ipv6_packet_stats_read_connections_connection(struct sfe_ipv6 *s
 	//find connection in packet stat list..
 	if (src_dev_valid_for_pack_stats)
 	{
-		DEBUG_INFO("updating  for %pI6, orig(rx) %d, reply(tx) %d \n", &client_ip,
-				original_cm->rx_pack_stat_byte_count,reply_cm->rx_pack_stat_byte_count);
+		DEBUG_INFO("updating for %pI6, orig(rx) %ju, reply(tx) %ju\n",
+			&client_ip, original_cm->rx_pack_stat_byte_count,
+			reply_cm->rx_pack_stat_byte_count);
 		/*in this case rmnet_data is src of data so src_rx_bytes is data in
 		  uplink dir so they need to be added to tx_bytes of packet stats list*/
 		tx_bytes = reply_cm->rx_pack_stat_byte_count;
@@ -1114,8 +1109,9 @@ static bool sfe_ipv6_packet_stats_read_connections_connection(struct sfe_ipv6 *s
 	}
 	else if (dest_dev_valid_for_pack_stats)
 	{
-		DEBUG_INFO("updating  for %pI6, orig(tx) %d, reply(rx) %d \n", &client_ip,
-				original_cm->rx_pack_stat_byte_count,reply_cm->rx_pack_stat_byte_count);
+		DEBUG_INFO("updating for %pI6, orig(tx) %ju, reply(rx) %ju\n",
+			&client_ip, original_cm->rx_pack_stat_byte_count,
+			reply_cm->rx_pack_stat_byte_count);
 		tx_bytes = original_cm->rx_pack_stat_byte_count;
 		original_cm->rx_pack_stat_byte_count = 0;
 		rx_bytes = reply_cm->rx_pack_stat_byte_count;
@@ -1958,7 +1954,7 @@ static void sfe_ipv6_remove_connection(struct sfe_ipv6 *si, struct sfe_ipv6_conn
 				client_ip = c->dest_ip[0];
 			}
 			IPC_DEBUG(
-				"Destroyed updating  for %pI6, orig(rx) %d, reply(tx) %d\n",
+				"Destroyed updating  for %pI6, orig(rx) %ju, reply(tx) %ju\n",
 				&client_ip,
 				c->original_match->rx_pack_stat_byte_count,
 				c->reply_match->rx_pack_stat_byte_count);
@@ -1971,7 +1967,7 @@ static void sfe_ipv6_remove_connection(struct sfe_ipv6 *si, struct sfe_ipv6_conn
 		{
 			client_ip = c->src_ip[0];
 			IPC_DEBUG(
-				"Destroyed updating  for %pI6, orig(tx) %d, reply(rx) %d\n",
+				"Destroyed updating  for %pI6, orig(tx) %ju, reply(rx) %ju\n",
 				&client_ip,
 				c->original_match->rx_pack_stat_byte_count,
 				c->reply_match->rx_pack_stat_byte_count);
@@ -2148,9 +2144,7 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	__be16 dest_port;
 	struct sfe_ipv6_connection_match *cm;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int ret = 0;
 	unsigned int skb_trim_len, trim_len = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
@@ -2522,9 +2516,7 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	struct sfe_ipv6_connection_match *counter_cm;
 	uint32_t flags;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb ;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int ret = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
 	uint32_t data_offs;
@@ -3664,7 +3656,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 		original_cm->expand_head = false;
 		reply_cm->expand_head = false;
 	}
-	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0)) 
+	if ((strncmp(dest_dev->name, WLAN_INTF1, WLAN_INTF_LEN)  == 0))
 	{
 		original_cm->index = SFE_WLAN_LINK_INDEX0;
 		reply_cm->index = SFE_WLAN_LINK_INDEX_NONE;

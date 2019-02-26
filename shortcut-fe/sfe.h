@@ -57,7 +57,7 @@
  */
 #define DEBUG_LEVEL 2
 static void *ipc_sfe_log_ctxt;
-static void *ipc_sfe_log_ctxt_low;
+void *ipc_sfe_log_ctxt_low;
 
 enum {
 	ERROR_LEVEL = 1,
