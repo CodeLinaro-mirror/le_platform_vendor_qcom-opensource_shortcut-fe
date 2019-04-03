@@ -3487,7 +3487,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	struct sfe_ipv6_connection_match *reply_cm;
 	struct net_device *dest_dev;
 	struct net_device *src_dev;
-	struct net_device *parent_dev;
+	struct net_device *parent_dev = NULL;
 
 	bool dest_dev_valid_for_pack_stats = false;
 	bool src_dev_valid_for_pack_stats = false;

@@ -1098,7 +1098,7 @@ static inline void add_l2tp_entry_to_ht(struct sfe_l2tp_config *conf)
 {
 	sfe_l2tp_ht[conf->session_id].command = conf->command;
 
-	if (conf->session_id < 0 || conf->session_id > SFE_L2TP_MAX_CONF) {
+	if (conf->session_id < 0 || conf->session_id >= SFE_L2TP_MAX_CONF) {
 		DEBUG_INFO("session_id out of range\n");
 		return;
 	}
@@ -1137,7 +1137,7 @@ static void sfe_l2tp_nl_receive(struct sk_buff *skb)
 	gPID = nlheader->nlmsg_pid;
 
 	if (sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id < 0 ||
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id >
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id >=
 			SFE_L2TP_MAX_CONF) {
 		DEBUG_INFO("session_id out of range\n");
 		goto Free_nl_l2tp_ptr;
