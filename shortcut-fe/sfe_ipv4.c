@@ -657,8 +657,6 @@ static void sfe_ipv4_remove_packet_stats_connection(__be32 client_addr)
 {
 	struct sfe_ipv4 *si = &__si;
 	struct sfe_ipv4_packet_stats_list* curr = NULL;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	spin_lock_bh(&si->lock);
@@ -693,8 +691,6 @@ static void sfe_ipv4_remove_packet_stats_connection(__be32 client_addr)
 static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct sfe_ipv4_packet_stats_list* node)
 {
 	struct sfe_ipv4_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash(node->packet_stats_node.client_src_addr);
@@ -720,8 +716,6 @@ static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct 
 static bool sfe_ipv4_update_packet_stats_connection(struct sfe_ipv4 *sic,__be32 client_addr, uint64_t rx_bytes, uint64_t tx_bytes )
 {
 	struct sfe_ipv4_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash(client_addr);
@@ -1231,7 +1225,6 @@ static struct file_operations sfe_ipv4_packet_stats_fops = {
 };
 static void sfe_ipv4_nl_receive(struct sk_buff *skb)
 {
-	int err;
 	struct nlmsghdr *nlheader;
 	struct nl_rx_buffer *nl_data_ptr = NULL;
 	if (packet_stats_enabled)
@@ -2020,10 +2013,8 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	struct sfe_ipv4_connection_match *cm;
 	uint8_t ttl;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb ;
 	int trim_len = 0;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int ret = 0;
 	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
 	/*
@@ -2421,10 +2412,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	uint8_t ttl;
 	uint32_t flags;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb ;
 	int trim_len = 0;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int ret = 0;
 	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
 	uint32_t data_offs;
