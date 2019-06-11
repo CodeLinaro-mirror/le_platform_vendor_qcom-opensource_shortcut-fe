@@ -676,7 +676,7 @@ static ssize_t sfe_ipv6_debug_level_low_store(struct device *dev,
 		} else {
 			if (ipc_sfe_log_ctxt_low)
 				ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
-				ipc_sfe_log_ctxt_low = NULL;
+			ipc_sfe_log_ctxt_low = NULL;
 		}
 	}
 	sfe_v6_enable_ipc_low = tmp;
@@ -2364,9 +2364,10 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 				 * For the simple case we write this really fast.
 				 */
 				if (skb_headroom(skb) <
-					xmit_dev->hard_header_len)
-					ret = pskb_expand_head(skb, ETH_HLEN, 0,
-							GFP_ATOMIC);
+					xmit_dev->hard_header_len) {
+					ret = pskb_expand_head(skb,
+						ETH_HLEN, 0, GFP_ATOMIC);
+				}
 					if (ret) {
 						kfree_skb(skb);
 						IPC_DEBUG_LOW(
@@ -2519,7 +2520,6 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	int ret = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
-	uint32_t data_offs;
 	unsigned int trim_len = 0;
 
 	/*
@@ -2928,9 +2928,10 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 				 * For the simple case we write this really fast.
 				 */
 				if (skb_headroom(skb) <
-					xmit_dev->hard_header_len)
-					ret = pskb_expand_head(skb, ETH_HLEN, 0,
-							GFP_ATOMIC);
+					xmit_dev->hard_header_len) {
+					ret = pskb_expand_head(skb,
+						ETH_HLEN, 0, GFP_ATOMIC);
+				}
 					if (ret) {
 						kfree_skb(skb);
 						IPC_DEBUG_LOW(

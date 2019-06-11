@@ -2239,7 +2239,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 					xmit_dev->hard_header_len) {
 					ret = pskb_expand_head(skb,
 								HH_DATA_ALIGN(
-					xmit_dev->hard_header_len -
+						xmit_dev->hard_header_len -
 						skb_headroom(skb)),
 							0, GFP_ATOMIC);
 					if (ret) {
@@ -2258,9 +2258,10 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 				 * For the simple case we write this really fast.
 				 */
 				if (skb_headroom(skb) <
-					xmit_dev->hard_header_len)
-					ret = pskb_expand_head(skb, ETH_HLEN, 0,
-							GFP_ATOMIC);
+					xmit_dev->hard_header_len) {
+					ret = pskb_expand_head(skb,
+						ETH_HLEN, 0, GFP_ATOMIC);
+				}
 					if (ret) {
 						kfree_skb(skb);
 						IPC_DEBUG_LOW(
@@ -2416,7 +2417,6 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	int ret = 0;
 	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
-	uint32_t data_offs;
 
 
 	/*

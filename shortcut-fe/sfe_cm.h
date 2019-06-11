@@ -162,9 +162,9 @@ int sfe_tcpdump_enable = 1;
 static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_prev)
 {
 	struct net_device *dev;
+	int ret = true;
 
 	dev = skb->dev;
-	int ret = true;
 
 	if (pt_prev) {
 #ifdef ISKERNEL4_14
