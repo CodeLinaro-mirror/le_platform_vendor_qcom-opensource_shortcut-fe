@@ -2,7 +2,7 @@
  * sfe-cm.c
  *	Shortcut forwarding engine connection manager.
  *
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -298,6 +298,7 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr,
 	struct dst_entry *dst;
 	struct net_device *mac_dev;
 	struct flowi4 flp4;
+	struct flowi6 flp6;
 
 	/*
 	 * Look up the rtable entry for the IP address then get the hardware
@@ -315,12 +316,13 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr,
 
 		dst = (struct dst_entry *)rt;
 	} else {
-		rt6 = rt6_lookup(&init_net, (struct in6_addr *)addr->ip6, 0, 0, 0);
-		if (!rt6) {
+		memset(&flp6, 0, sizeof(struct flowi6));
+		memcpy(&flp6.daddr, (struct in6_addr *)addr->ip6,
+			sizeof(struct in6_addr));
+		flp6.flowi6_mark = mark;
+		dst = ip6_route_output(&init_net, NULL, &flp6);
+		if (dst == NULL || dst->error)
 			goto ret_fail;
-		}
-
-		dst = (struct dst_entry *)rt6;
 	}
 
 	rcu_read_lock();
