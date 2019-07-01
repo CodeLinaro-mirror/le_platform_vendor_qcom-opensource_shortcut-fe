@@ -16,10 +16,8 @@
  */
 
 #include <linux/module.h>
-#include <linux/init.h>
 #include <linux/sysfs.h>
 #include <linux/skbuff.h>
-#include <linux/debugfs.h>
 #include <linux/icmp.h>
 #include <net/tcp.h>
 #include <linux/etherdevice.h>
@@ -27,8 +25,11 @@
 #include <linux/netlink.h>
 #include <linux/hashtable.h>
 #include <linux/proc_fs.h>
+#ifdef FEATURE_L2TP_OVER_SFE
 #include <linux/l2tp.h>
 #include <linux/if_vlan.h>
+#include <linux/init.h>
+#endif
 
 #include "sfe.h"
 #include "sfe_cm.h"
@@ -36,10 +37,12 @@
 #define PKT_THRESHOLD 10
 #define TIMEOUT 100
 #define PACKETS_STATS_ENABLED 0
+#ifdef FEATURE_L2TP_OVER_SFE
 #define IPPROTO_L2TP 115
 #define L2TP_TUNNEL_SIZE 4
 #define CISCO_HDLC_SIZE 4
 #define INNER_HDR_SIZE 14
+#endif
 
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
@@ -275,7 +278,9 @@ struct sfe_ipv6_connection_match {
 	struct sfe_ipv6_connection_match *active_prev;
 	/* Pointer to the previous connection in the active list */
 	bool active;			/* Flag to indicate if we're on the active list */
+#ifdef FEATURE_L2TP_OVER_SFE
 	bool l2tp_traffic;
+#endif
 	/*
 	 * Characteristics that identify flows that match this rule.
 	 */
@@ -3196,7 +3201,7 @@ static int sfe_ipv6_recv_icmp(struct sfe_ipv6 *si, struct sk_buff *skb, struct n
 	return 0;
 }
 
-
+#ifdef FEATURE_L2TP_OVER_SFE
 int sfe_l2tp_ipv6_recv(
 	struct sk_buff *skb,
 	unsigned int ihl,
@@ -3257,6 +3262,7 @@ int sfe_l2tp_ipv6_recv(
 	return 0;
 
 }
+#endif
 
 /*
  * sfe_ipv6_recv()
@@ -3336,9 +3342,10 @@ int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 				DEBUG_TRACE_LOW("non-initial fragment\n");
 				return 0;
 			}
-
+#ifdef FEATURE_L2TP_OVER_SFE
 			else if (next_hdr == IPPROTO_L2TP)
 				return 0;
+#endif
 		}
 
 		ext_hdr_len = ext_hdr->hdr_len;
@@ -3362,10 +3369,10 @@ int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 	if (unlikely(sfe_tcpdump_enable)) {
 		sfe_tcpdump_log(skb,pt_prev);
 	}
-
+#ifdef FEATURE_L2TP_OVER_SFE
 	if (next_hdr == IPPROTO_L2TP)
 		return sfe_l2tp_ipv6_recv(skb, ihl, pt_prev);
-
+#endif
 	if (IPPROTO_TCP == next_hdr) {
 		return sfe_ipv6_recv_tcp(si, skb, dev, len, iph, ihl, flush_on_find);
 	}
@@ -3487,7 +3494,9 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	struct sfe_ipv6_connection_match *reply_cm;
 	struct net_device *dest_dev;
 	struct net_device *src_dev;
+#ifdef FEATURE_L2TP_OVER_SFE
 	struct net_device *parent_dev = NULL;
+#endif
 
 	bool dest_dev_valid_for_pack_stats = false;
 	bool src_dev_valid_for_pack_stats = false;
@@ -3573,7 +3582,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 		}
 	}
 
-
+#ifdef FEATURE_L2TP_OVER_SFE
 	/* this function is for l2tp optimization */
 	if (sic->l2tp_traffic) {
 		DEBUG_TRACE_LOW("l2tp_traffic is enabled\n");
@@ -3586,6 +3595,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 			original_cm->l2tp_traffic = false;
 		}
 	}
+#endif
 
 	/*
 	 * Fill in the "original" direction connection matching object.
@@ -3593,10 +3603,11 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	 * we always know both ends of a connection by their translated
 	 * addresses and not their public addresses.
 	 */
-
+#ifdef FEATURE_L2TP_OVER_SFE
 	if (original_cm->l2tp_traffic)
 		original_cm->match_dev = parent_dev;
 	else
+#endif
 		original_cm->match_dev = src_dev;
 	original_cm->match_protocol = sic->protocol;
 	original_cm->match_src_ip[0] = sic->src_ip.ip6[0];
@@ -4839,7 +4850,9 @@ static void __exit sfe_ipv6_exit(void)
 	module_init(sfe_ipv6_init)
 module_exit(sfe_ipv6_exit)
 	EXPORT_SYMBOL(sfe_ipv6_recv);
+#ifdef FEATURE_L2TP_OVER_SFE
 	EXPORT_SYMBOL(sfe_l2tp_ipv6_recv);
+#endif
 	EXPORT_SYMBOL(sfe_ipv6_create_rule);
 	EXPORT_SYMBOL(sfe_ipv6_destroy_rule);
 	EXPORT_SYMBOL(sfe_ipv6_destroy_all_rules_for_dev);

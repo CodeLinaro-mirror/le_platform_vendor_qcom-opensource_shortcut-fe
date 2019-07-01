@@ -238,7 +238,9 @@ struct sfe_ipv4_connection_match {
 	struct sfe_ipv4_connection_match *active_prev;
 	/* Pointer to the previous connection in the active list */
 	bool active;			/* Flag to indicate if we're on the active list */
+#ifdef FEATURE_L2TP_OVER_SFE
 	bool l2tp_traffic;
+#endif
 
 	/*
 	 * Characteristics that identify flows that match this rule.
@@ -3337,7 +3339,9 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	struct sfe_ipv4_connection_match *reply_cm;
 	struct net_device *dest_dev;
 	struct net_device *src_dev;
+#ifdef FEATURE_L2TP_OVER_SFE
 	struct net_device *parent_dev = NULL;
+#endif
 	bool dest_dev_valid_for_pack_stats = false;
 	bool src_dev_valid_for_pack_stats = false;
 	struct sfe_ipv4_packet_stats_list *packet_list;
@@ -3420,6 +3424,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	}
 
 
+#ifdef FEATURE_L2TP_OVER_SFE
 /* this function is for l2tp optimization */
 	if (sic->l2tp_traffic) {
 		DEBUG_TRACE_LOW("l2tp_traffic is enabled\n");
@@ -3434,16 +3439,18 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 			original_cm->l2tp_traffic = false;
 		}
 	}
+#endif
 	/*
 	 * Fill in the "original" direction connection matching object.
 	 * Note that the transmit MAC address is "dest_mac_xlate" because
 	 * we always know both ends of a connection by their translated
 	 * addresses and not their public addresses.
 	 */
-
+#ifdef FEATURE_L2TP_OVER_SFE
 	if (original_cm->l2tp_traffic)
 		original_cm->match_dev = parent_dev;
 	else
+#endif
 		original_cm->match_dev = src_dev;
 
 	original_cm->match_protocol = sic->protocol;

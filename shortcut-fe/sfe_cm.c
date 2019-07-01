@@ -36,7 +36,9 @@
 #include "sfe_cm.h"
 #include "sfe_backport.h"
 
+#ifdef FEATURE_L2TP_OVER_SFE
 #define NL_UNICAST_GRP 0
+#endif
 
 typedef enum sfe_cm_exception {
 	SFE_CM_EXCEPTION_PACKET_BROADCAST,
@@ -81,6 +83,7 @@ static char *sfe_cm_exception_events_string[SFE_CM_EXCEPTION_MAX] = {
 	"LOCAL_OUT"
 };
 
+#ifdef FEATURE_L2TP_OVER_SFE
 struct sock *nl_l2tp_sock;
 
 static void sfe_l2tp_nl_receive(struct sk_buff *skb);
@@ -90,7 +93,7 @@ static struct netlink_kernel_cfg nl_l2tp_cfg = {
 	.groups = NL_UNICAST_GRP,
 	.flags = 0,
 };
-
+#endif
 /*
  * Per-module structure.
  */
@@ -716,6 +719,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 		dest_dev_use = dest_br_dev;
 	}
 #endif
+#ifdef FEATURE_L2TP_OVER_SFE
 	/*
 	 * L2TP optimizations over SFE
 	 * Here we pass the value of L2TP hashtable to
@@ -732,6 +736,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 		sic.l2tp_traffic = l2tp_traffic;
 		sic.parent_dev = NULL;
 	}
+#endif
 
 	sic.src_dev = src_dev_use;
 	sic.dest_dev = dest_dev_use;
@@ -1092,7 +1097,7 @@ static ssize_t sfe_cm_get_exceptions(struct device *dev,
 	return len;
 }
 
-
+#ifdef FEATURE_L2TP_OVER_SFE
 /* common api to add l2tp entry to hash array*/
 static inline void add_l2tp_entry_to_ht(struct sfe_l2tp_config *conf)
 {
@@ -1162,6 +1167,8 @@ static void sfe_l2tp_nl_receive(struct sk_buff *skb)
 Free_nl_l2tp_ptr:
 	kfree(nl_l2tp_ptr);
 }
+#endif
+
 /*
  * sysfs attributes.
  */
@@ -1220,6 +1227,7 @@ static int __init sfe_cm_init(void)
 		DEBUG_ERROR("can't register nf post routing hook: %d\n", result);
 		goto exit3;
 	}
+#ifdef FEATURE_L2TP_OVER_SFE
 	nl_l2tp_sock =
 		netlink_kernel_create(
 			&init_net,
@@ -1230,6 +1238,7 @@ static int __init sfe_cm_init(void)
 		DEBUG_ERROR("Error creating SFE L2TP NL socket");
 		goto exit3;
 	}
+#endif
 	spin_lock_init(&sc->lock);
 
 	/*
@@ -1272,8 +1281,10 @@ static void __exit sfe_cm_exit(void)
 
 	DEBUG_INFO("SFE CM exit\n");
 
+#ifdef FEATURE_L2TP_OVER_SFE
 	if (nl_l2tp_sock)
 		netlink_kernel_release(nl_l2tp_sock);
+#endif
 
 	/*
 	 * Unregister our sync callback.
