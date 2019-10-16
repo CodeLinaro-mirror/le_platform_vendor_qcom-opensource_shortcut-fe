@@ -26,12 +26,14 @@
 #ifndef SFE_SUPPORT_IPV6
 #define SFE_SUPPORT_IPV6
 #endif
+#ifdef FEATURE_L2TP_OVER_SFE
 #define SFE_PASS_L2TP_CONFIG_TO_SFE 0xA0
 #define SFE_DEL_L2TP_CONFIG_FROM_SFE 0xA1
 #define L2TP_GENERIC_IFACE_NAME "l2tpeth"
 #define L2TP_ETH_MIN_LENGTH 7
 #define NL_L2TP_PROTO_ID 24
 #define SFE_L2TP_MAX_CONF 100
+#endif
 
 /*
  * IPv6 address structure
@@ -55,6 +57,7 @@ typedef enum
 	SFE_WLAN_LINK_INDEX3 = 3
 }sfe_wlan_index_type;
 
+#ifdef FEATURE_L2TP_OVER_SFE
 /*
  * Data struct to represent L2TP Tunnel config.
  */
@@ -72,6 +75,7 @@ struct sfe_l2tp_config {
 
 static bool l2tp_traffic;
 static struct sfe_l2tp_config sfe_l2tp_ht[SFE_L2TP_MAX_CONF];
+#endif
 
 /*
  * connection creation structure.
@@ -80,7 +84,9 @@ struct sfe_connection_create {
 	int protocol;
 	struct net_device *src_dev;
 	struct net_device *dest_dev;
+#ifdef FEATURE_L2TP_OVER_SFE
 	struct net_device *parent_dev;
+#endif
 	uint32_t flags;
 	uint32_t src_mtu;
 	uint32_t dest_mtu;
@@ -113,8 +119,10 @@ struct sfe_connection_create {
 	uint32_t dest_priority;
 	uint32_t src_dscp;
 	uint32_t dest_dscp;
+#ifdef FEATURE_L2TP_OVER_SFE
 	bool l2tp_traffic;
 	struct sfe_l2tp_config sfe_config_hash[SFE_L2TP_MAX_CONF];
+#endif
 };
 
 /*
@@ -183,6 +191,7 @@ struct sfe_connection_mark {
 	uint32_t mark;
 };
 
+#ifdef FEATURE_L2TP_OVER_SFE
 static int extract_vlan_from_iface(char *str)
 {
 	int res = 0, i;
@@ -223,6 +232,7 @@ static void sfe_l2tp_find_parent_dev
 				sfe_l2tp_ht[session_idx].parent_iface);
 	}
 }
+#endif
 
 /*Common API for sfe tcpdump enablement */
 static int sfe_tcpdump_enable = 1;
@@ -263,12 +273,14 @@ extern void sfe_ipv4_mark_rule(struct sfe_connection_mark *mark);
 /*
  * IPv6 APIs used by connection manager
  */
+#ifdef FEATURE_L2TP_OVER_SFE
 extern int sfe_l2tp_ipv6_recv
 (
 	struct sk_buff *skb,
 	unsigned int ihl,
 	struct packet_type *pt_prev
 );
+#endif
 extern int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_type *pt_prev);
 extern int sfe_ipv6_create_rule(struct sfe_connection_create *sic);
 extern void sfe_ipv6_destroy_rule(struct sfe_connection_destroy *sid);
