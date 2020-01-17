@@ -24,6 +24,8 @@
 #include <linux/inetdevice.h>
 #include <linux/netfilter_bridge.h>
 #include <linux/netfilter_ipv6.h>
+#include <linux/netfilter.h>
+#include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_acct.h>
 #include <net/netfilter/nf_conntrack_helper.h>
 #include <net/netfilter/nf_conntrack_zones.h>
@@ -33,6 +35,10 @@
 #include "sfe.h"
 #include "sfe_cm.h"
 #include "sfe_backport.h"
+
+#ifdef FEATURE_L2TP_OVER_SFE
+#define NL_UNICAST_GRP 0
+#endif
 
 typedef enum sfe_cm_exception {
 	SFE_CM_EXCEPTION_PACKET_BROADCAST,
@@ -77,6 +83,17 @@ static char *sfe_cm_exception_events_string[SFE_CM_EXCEPTION_MAX] = {
 	"LOCAL_OUT"
 };
 
+#ifdef FEATURE_L2TP_OVER_SFE
+struct sock *nl_l2tp_sock;
+
+static void sfe_l2tp_nl_receive(struct sk_buff *skb);
+
+static struct netlink_kernel_cfg nl_l2tp_cfg = {
+	.input = sfe_l2tp_nl_receive,
+	.groups = NL_UNICAST_GRP,
+	.flags = 0,
+};
+#endif
 /*
  * Per-module structure.
  */
@@ -112,6 +129,8 @@ extern void (*delete_sfe_entry)(struct nf_conn *ct);
  * Expose what should be a static flag in the TCP connection tracker.
  */
 extern int nf_ct_tcp_no_window_check;
+uint32_t gPID;
+
 /*
  * sfe_cm_incr_exceptions()
  *	increase an exception counter.
@@ -269,13 +288,16 @@ static void sfe_cm_delete_conntrack (struct nf_conn *ct)
  * structure, obtain the hardware address.  This means this function also
  * works if the neighbours are routers too.
  */
-static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr, struct net_device **dev, uint8_t *mac_addr, int is_v4)
+static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr,
+			struct net_device **dev,
+			uint8_t *mac_addr, int is_v4, uint32_t mark)
 {
 	struct neighbour *neigh;
 	struct rtable *rt;
 	struct rt6_info *rt6;
 	struct dst_entry *dst;
 	struct net_device *mac_dev;
+	struct flowi4 flp4;
 
 	/*
 	 * Look up the rtable entry for the IP address then get the hardware
@@ -283,7 +305,10 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr, struct net_device 
 	 * neighbours are routers too.
 	 */
 	if (likely(is_v4)) {
-		rt = ip_route_output(&init_net, addr->ip, 0, 0, 0);
+		memset(&flp4, 0, sizeof(struct flowi4));
+		flp4.daddr = addr->ip;
+		flp4.flowi4_mark = mark;
+		rt = ip_route_output_key(&init_net, &flp4);
 		if (unlikely(IS_ERR(rt))) {
 			goto ret_fail;
 		}
@@ -424,11 +449,13 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	/*
 	 * Don't process untracked connections.
 	 */
+#ifndef ISKERNEL4_14
 	if (unlikely(ct == &nf_conntrack_untracked)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_CT_NO_TRACK);
 		DEBUG_TRACE("untracked connection\n");
 		return NF_ACCEPT;
 	}
+#endif
 
 	/*
 	 * Unconfirmed connection may be dropped by Linux at the final step,
@@ -458,7 +485,6 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	orig_tuple = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
 	reply_tuple = ct->tuplehash[IP_CT_DIR_REPLY].tuple;
 	sic.protocol = (int32_t)orig_tuple.dst.protonum;
-
 	/*
 	 * Get addressing information, non-NAT first
 	 */
@@ -498,6 +524,9 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	}
 
 	sic.flags = 0;
+#if defined(CONFIG_NF_CONNTRACK_MARK)
+	sic.mark = ct->mark;
+#endif
 
 	switch (sic.protocol) {
 	case IPPROTO_TCP:
@@ -585,27 +614,33 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * Get the net device and MAC addresses that correspond to the various source and
 	 * destination host addresses.
 	 */
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip, &src_dev, sic.src_mac, is_v4)) {
+
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip, &src_dev,
+					sic.src_mac, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_DEV);
 		return NF_ACCEPT;
 	}
+
 	src_dev_use = src_dev;
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip_xlate, &dev, sic.src_mac_xlate, is_v4)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip_xlate, &dev,
+					sic.src_mac_xlate, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_XLATE_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip, &dev, sic.dest_mac, is_v4)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip, &dev,
+					sic.dest_mac, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip_xlate, &dest_dev, sic.dest_mac_xlate, is_v4)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip_xlate, &dest_dev,
+					sic.dest_mac_xlate, is_v4, sic.mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_XLATE_DEV);
 		goto done1;
 	}
@@ -661,6 +696,24 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 		dest_dev_use = dest_br_dev;
 	}
 #endif
+#ifdef FEATURE_L2TP_OVER_SFE
+	/*
+	 * L2TP optimizations over SFE
+	 * Here we pass the value of L2TP hashtable to
+	 * SFE_Connection and later create rules accordingly,
+	 * based on the configuration of l2tp passed from l2tp
+	 * netlink events
+	 */
+
+	if (l2tp_traffic) {
+		memcpy(
+			sic.sfe_config_hash,
+			sfe_l2tp_ht,
+			sizeof(sic.sfe_config_hash));
+		sic.l2tp_traffic = l2tp_traffic;
+		sic.parent_dev = NULL;
+	}
+#endif
 
 	sic.src_dev = src_dev_use;
 	sic.dest_dev = dest_dev_use;
@@ -699,11 +752,13 @@ done1:
 	return NF_ACCEPT;
 }
 
+
+#ifdef ISKERNELUPGRADED
 /*
  * sfe_cm_ipv4_post_routing_hook()
  *	Called for packets about to leave the box - either locally generated or forwarded from another interface
  */
-sfe_cm_ipv4_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
+sfe_cm_ipv4_post_routing_hook(priv, skb, state)
 {
 	return sfe_cm_post_routing(skb, true);
 }
@@ -712,10 +767,24 @@ sfe_cm_ipv4_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
  * sfe_cm_ipv6_post_routing_hook()
  *	Called for packets about to leave the box - either locally generated or forwarded from another interface
  */
+sfe_cm_ipv6_post_routing_hook(priv, skb, state)
+{
+	return sfe_cm_post_routing(skb, false);
+}
+
+#else
+
+sfe_cm_ipv4_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
+{
+	return sfe_cm_post_routing(skb, true);
+}
+
 sfe_cm_ipv6_post_routing_hook(hooknum, ops, skb, in_unused, out, okfn)
 {
 	return sfe_cm_post_routing(skb, false);
 }
+
+#endif
 
 
 #if 0
@@ -813,7 +882,9 @@ static int sfe_cm_conntrack_event(unsigned int events, struct nf_ct_event *item)
 static struct nf_hook_ops sfe_cm_ops_post_routing[] __read_mostly = {
 	{
 		.hook = __sfe_cm_ipv4_post_routing_hook,
+#ifndef ISKERNELUPGRADED
 		.owner = THIS_MODULE,
+#endif
 		.pf = NFPROTO_IPV4,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP_PRI_NAT_SRC + 1,
@@ -821,7 +892,9 @@ static struct nf_hook_ops sfe_cm_ops_post_routing[] __read_mostly = {
 #ifdef SFE_SUPPORT_IPV6
 	{
 		.hook = __sfe_cm_ipv6_post_routing_hook,
+#ifndef ISKERNELUPGRADED
 		.owner = THIS_MODULE,
+#endif
 		.pf = NFPROTO_IPV6,
 		.hooknum = NF_INET_POST_ROUTING,
 		.priority = NF_IP6_PRI_NAT_SRC + 1,
@@ -872,21 +945,31 @@ static void sfe_cm_sync_rule(struct sfe_connection_sync *sis)
 	/*
 	 * Look up conntrack connection
 	 */
+#ifdef ISKERNELUPGRADED
+	h = nf_conntrack_find_get(&init_net, NF_CT_DEFAULT_ZONE_ID, &tuple);
+#else
 	h = nf_conntrack_find_get(&init_net, NF_CT_DEFAULT_ZONE, &tuple);
+#endif
 	if (unlikely(!h)) {
 		DEBUG_TRACE("no connection found\n");
 		return;
 	}
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
-	NF_CT_ASSERT(ct->timeout.data == (unsigned long)ct);
 
+#ifndef ISKERNELUPGRADED
+	NF_CT_ASSERT(ct->timeout.data == (unsigned long)ct);
+#endif
 	/*
 	 * Only update if this is not a fixed timeout
 	 */
 	if (!test_bit(IPS_FIXED_TIMEOUT_BIT, &ct->status)) {
 		spin_lock_bh(&ct->lock);
+#ifdef ISKERNELUPGRADED
+		ct->timeout += sis->delta_jiffies;
+#else
 		ct->timeout.expires += sis->delta_jiffies;
+#endif
 		spin_unlock_bh(&ct->lock);
 	}
 
@@ -991,6 +1074,78 @@ static ssize_t sfe_cm_get_exceptions(struct device *dev,
 	return len;
 }
 
+#ifdef FEATURE_L2TP_OVER_SFE
+/* common api to add l2tp entry to hash array*/
+static inline void add_l2tp_entry_to_ht(struct sfe_l2tp_config *conf)
+{
+	sfe_l2tp_ht[conf->session_id].command = conf->command;
+
+	if (conf->session_id < 0 || conf->session_id >= SFE_L2TP_MAX_CONF) {
+		DEBUG_INFO("session_id out of range\n");
+		return;
+	}
+	sfe_l2tp_ht[conf->session_id].session_id = conf->session_id;
+
+	strlcpy(
+		sfe_l2tp_ht[conf->session_id].l2tp_iface,
+		conf->l2tp_iface,
+		MAX_IFACE_NAME_SIZE);
+	strlcpy(
+		sfe_l2tp_ht[conf->session_id].parent_iface,
+		conf->parent_iface, MAX_IFACE_NAME_SIZE);
+
+	DEBUG_INFO(
+		"values of L2TP config l2tp_intf = %s, parent = %s\n",
+		sfe_l2tp_ht[conf->session_id].l2tp_iface,
+		sfe_l2tp_ht[conf->session_id].parent_iface);
+}
+
+
+static void sfe_l2tp_nl_receive(struct sk_buff *skb)
+{
+	struct nlmsghdr *nlheader;
+	struct sfe_l2tp_config *nl_l2tp_ptr = NULL;
+
+	nl_l2tp_ptr = kmalloc(sizeof(struct sfe_l2tp_config), GFP_KERNEL);
+
+	if (nl_l2tp_ptr == NULL) {
+		DEBUG_INFO("Cannot allocate memmory for NL msg\n");
+		return;
+	}
+
+	nlheader = (struct nlmsghdr *)skb->data;
+	memcpy(nl_l2tp_ptr, (struct sfe_l2tp_config *)
+			nlmsg_data(nlheader), sizeof(struct sfe_l2tp_config));
+	gPID = nlheader->nlmsg_pid;
+
+	if (sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id < 0 ||
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id >=
+			SFE_L2TP_MAX_CONF) {
+		DEBUG_INFO("session_id out of range\n");
+		goto Free_nl_l2tp_ptr;
+	}
+
+	if (nl_l2tp_ptr->command == SFE_PASS_L2TP_CONFIG_TO_SFE) {
+		l2tp_traffic = true;
+		add_l2tp_entry_to_ht(nl_l2tp_ptr);
+	} else if (nl_l2tp_ptr->command == SFE_DEL_L2TP_CONFIG_FROM_SFE) {
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].command = 0;
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].local_tunnel_id = 0;
+		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id = 0;
+		memset(
+			sfe_l2tp_ht[nl_l2tp_ptr->session_id].parent_iface,
+			0,
+			MAX_IFACE_NAME_SIZE);
+		memset(
+			sfe_l2tp_ht[nl_l2tp_ptr->session_id].l2tp_iface,
+			0,
+			MAX_IFACE_NAME_SIZE);
+	}
+Free_nl_l2tp_ptr:
+	kfree(nl_l2tp_ptr);
+}
+#endif
+
 /*
  * sysfs attributes.
  */
@@ -1039,12 +1194,28 @@ static int __init sfe_cm_init(void)
 	/*
 	 * Register our netfilter hooks.
 	 */
+#ifdef ISKERNEL4_14
+	result = nf_register_net_hooks(&init_net,
+		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#else
 	result = nf_register_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#endif
 	if (result < 0) {
 		DEBUG_ERROR("can't register nf post routing hook: %d\n", result);
 		goto exit3;
 	}
+#ifdef FEATURE_L2TP_OVER_SFE
+	nl_l2tp_sock =
+		netlink_kernel_create(
+			&init_net,
+			NL_L2TP_PROTO_ID,
+			&nl_l2tp_cfg);
 
+	if (!nl_l2tp_sock) {
+		DEBUG_ERROR("Error creating SFE L2TP NL socket");
+		goto exit3;
+	}
+#endif
 	spin_lock_init(&sc->lock);
 
 	/*
@@ -1087,6 +1258,11 @@ static void __exit sfe_cm_exit(void)
 
 	DEBUG_INFO("SFE CM exit\n");
 
+#ifdef FEATURE_L2TP_OVER_SFE
+	if (nl_l2tp_sock)
+		netlink_kernel_release(nl_l2tp_sock);
+#endif
+
 	/*
 	 * Unregister our sync callback.
 	 */
@@ -1114,7 +1290,12 @@ static void __exit sfe_cm_exit(void)
 	sfe_ipv4_destroy_all_rules_for_dev(NULL);
 	sfe_ipv6_destroy_all_rules_for_dev(NULL);
 
+#ifdef ISKERNEL4_14
+	nf_unregister_net_hooks(&init_net,
+		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#else
 	nf_unregister_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+#endif
 
 	unregister_inet6addr_notifier(&sc->inet6_notifier);
 	unregister_inetaddr_notifier(&sc->inet_notifier);
