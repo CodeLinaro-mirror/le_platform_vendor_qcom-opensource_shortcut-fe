@@ -15,6 +15,16 @@
 #
 SFE_SUPPORT_IPV6 = IPV6
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
+DEBUG_CFLAGS = -g
+KVER = $(KERNEL_VERSION)
+
+ifeq ($(KVER),$(filter 4.9%,$(KVER)))
+ccflags-y += -DISKERNELUPGRADED
+endif
+
+ifeq ($(KVER),$(filter 4.14%,$(KVER)))
+ccflags-y += -DISKERNELUPGRADED -DISKERNEL4_14
+endif
 obj-m += shortcut-fe.o
 
 ifdef SFE_SUPPORT_IPV6
@@ -35,13 +45,18 @@ shortcut-fe-cm-objs := \
 	sfe_cm.o
 
 	ccflags-y += -D__CHECK_ENDIAN__
-
+	ccflags-y += $(CFLAGS)
+ifdef CFLAGS
+	ccflags-y += -g
+endif
 CDEFINES += -D__CHECK_ENDIAN__
 
 KBUILD_CPPFLAGS += $(CDEFINES)
 
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(shell pwd) modules
+debug:
+	 $(MAKE) -C $(KERNEL_SRC) M=$(shell pwd) modules EXTRA_CFLAGS=$(DEBUG_CFLAGS)
 modules_install:
 	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(shell pwd) modules_install
 
