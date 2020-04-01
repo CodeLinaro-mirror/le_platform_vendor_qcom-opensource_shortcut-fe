@@ -244,7 +244,7 @@ static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_pr
 	int ret = true;
 
 	if (pt_prev) {
-#if ISKERNEL4_14
+#ifdef ISKERNEL4_14
 		refcount_inc(&skb->users);
 #else
 		atomic_inc(&skb->users);
