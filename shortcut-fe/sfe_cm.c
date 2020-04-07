@@ -40,6 +40,10 @@
 #define NL_UNICAST_GRP 0
 #endif
 
+#ifdef ISKERNEL4_14
+#include <linux/if_vlan.h>
+#endif
+
 typedef enum sfe_cm_exception {
 	SFE_CM_EXCEPTION_PACKET_BROADCAST,
 	SFE_CM_EXCEPTION_PACKET_MULTICAST,
@@ -161,6 +165,16 @@ int sfe_cm_recv(struct sk_buff *skb,struct packet_type *pt_tmp)
 	 */
 	prefetch(skb->data + 32);
 	barrier();
+
+#ifdef ISKERNEL4_14
+	/*
+	 * Send packet to network stack without processing if VLAN TAG is present
+	 * Untagging VLAN packet is impossible here as it is private for the context
+	 * This will avoid untagging after v4-v6 recv functions execute, saving MIPS
+	 */
+	if (skb_vlan_tag_present(skb))
+		return 0;
+#endif
 
 	dev = skb->dev;
 
