@@ -541,9 +541,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	}
 
 	sic.flags = 0;
-#if defined(CONFIG_NF_CONNTRACK_MARK)
-	sic.mark = ct->mark;
-#endif
+	sic.mark = skb->mark;
 
 	switch (sic.protocol) {
 	case IPPROTO_TCP:
