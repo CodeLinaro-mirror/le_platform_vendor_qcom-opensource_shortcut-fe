@@ -4034,9 +4034,16 @@ another_round:
 /*
  * sfe_ipv6_periodic_sync()
  */
+#ifdef ISKERNEL5_4
+static void sfe_ipv6_periodic_sync(struct timer_list *t)
+{
+	struct sfe_ipv6 *si = (struct sfe_ipv6 *)from_timer(si, t, timer);
+#else
 static void sfe_ipv6_periodic_sync(unsigned long arg)
 {
 	struct sfe_ipv6 *si = (struct sfe_ipv6 *)arg;
+#endif
+
 	uint64_t now_jiffies;
 	int quota;
 	sfe_sync_rule_callback_t sync_rule_callback;
@@ -4719,7 +4726,12 @@ static int __init sfe_ipv6_init(void)
 	/*
 	 * Create a timer to handle periodic statistics.
 	 */
+#ifdef ISKERNEL5_4
+	timer_setup(&si->timer, sfe_ipv6_periodic_sync, 0);
+#else
 	setup_timer(&si->timer, sfe_ipv6_periodic_sync, (unsigned long)si);
+#endif
+
 	mod_timer(&si->timer, jiffies + ((HZ + 99) / 100));
 
 	spin_lock_init(&si->lock);
