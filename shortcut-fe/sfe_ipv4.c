@@ -41,7 +41,7 @@ int skip_mtu_check = 1;
 int threshold_count;
 int timeout_count;
 int packet_stats_enabled = PACKETS_STATS_ENABLED;
-
+bool sfe_ipv4_init_complete;
 
 #define XDBG_ADD_PROC_ENTRY(it, name, xdata)             \
 {                                                 \
@@ -3769,6 +3769,15 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
  */
 void sfe_ipv4_destroy_rule(struct sfe_connection_destroy *sid)
 {
+	/*
+	 * Check if v4 module loading is complete.
+	 * No need to destroy rule in case module is not even present.
+	 */
+	if (!sfe_ipv4_init_complete) {
+		DEBUG_TRACE_LOW("SFE V4 module not inited\n");
+		return;
+	}
+
 	struct sfe_ipv4 *si = &__si;
 	struct sfe_ipv4_connection *c;
 
@@ -4652,6 +4661,7 @@ static int __init sfe_ipv4_init(void)
 
 	spin_lock_init(&si->lock);
 
+	sfe_ipv4_init_complete = true;
 	return 0;
 
 exit8:
@@ -4678,6 +4688,8 @@ exit2:
 exit1:
 	if (sfe_ipv4_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv4_dent);
+
+	sfe_ipv4_init_complete = false;
 	return result;
 }
 
@@ -4722,6 +4734,8 @@ static void __exit sfe_ipv4_exit(void)
 
 	if (sfe_ipv4_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv4_dent);
+
+	sfe_ipv4_init_complete = false;
 
 }
 

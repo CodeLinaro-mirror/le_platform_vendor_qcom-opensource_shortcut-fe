@@ -52,7 +52,7 @@ int threshold_count;
 int timeout_count;
 bool iface;
 int packet_stats_enabled = PACKETS_STATS_ENABLED;
-
+bool sfe_ipv6_init_complete;
 
 #define XDBG_ADD_PROC_ENTRY(it, name, xdata)             \
 {                                                 \
@@ -3914,6 +3914,15 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
  */
 void sfe_ipv6_destroy_rule(struct sfe_connection_destroy *sid)
 {
+	/*
+	 * Check if v6 module loading is complete.
+	 * No need to destroy rule in case module is not even present.
+	 */
+	if (!sfe_ipv6_init_complete) {
+		DEBUG_TRACE_LOW("SFE V6 module not inited\n");
+		return;
+	}
+
 	struct sfe_ipv6 *si = &__si6;
 	struct sfe_ipv6_connection *c;
 
@@ -4712,6 +4721,7 @@ static int __init sfe_ipv6_init(void)
 
 	spin_lock_init(&si->lock);
 
+	sfe_ipv6_init_complete = true;
 	return 0;
 
 exit8:
@@ -4738,6 +4748,8 @@ exit2:
 exit1:
 	if (sfe_ipv6_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv6_dent);
+
+	sfe_ipv6_init_complete = false;
 	return result;
 }
 
@@ -4782,6 +4794,8 @@ static void __exit sfe_ipv6_exit(void)
 
 	if (sfe_ipv6_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv6_dent);
+
+	sfe_ipv6_init_complete = false;
 
 }
 
