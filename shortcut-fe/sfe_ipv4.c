@@ -25,15 +25,19 @@
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
 #include <linux/proc_fs.h>
+#ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
-
+#endif
 #include "sfe.h"
 #include "sfe_cm.h"
+
 #define PKT_THRESHOLD 10
 #define TIMEOUT 100
 #define PACKETS_STATS_ENABLED 0
+#ifdef CONFIG_DEBUG_FS
 #define SFE_DEBUGFS_RW_PERM 0664
 #define SFE_DEBUGFS_READ_LEN 5000
+#endif
 
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
@@ -43,13 +47,13 @@ int timeout_count;
 int packet_stats_enabled = PACKETS_STATS_ENABLED;
 
 
-#define XDBG_ADD_PROC_ENTRY(it, name, xdata)             \
-{                                                 \
-	.procname       = (name),                 \
-	.data           = (xdata),                \
-	.maxlen         = sizeof(int),            \
-	.mode           = 0666,                   \
-	.proc_handler   = &proc_dointvec,         \
+#define XDBG_ADD_PROC_ENTRY(it, name, xdata)   \
+{                                              \
+	.procname       = (name),              \
+	.data           = (xdata),             \
+	.maxlen         = sizeof(int),         \
+	.mode           = 0666,                \
+	.proc_handler   = &proc_dointvec,      \
 }
 
 enum {
@@ -118,10 +122,10 @@ struct sfe_ipv4_eth_hdr {
 struct sfe_ipv4_ip_hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8 ihl:4,
-	     version:4;
+	 version:4;
 #elif defined (__BIG_ENDIAN_BITFIELD)
 	__u8 version:4,
-	     ihl:4;
+		 ihl:4;
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
@@ -163,27 +167,27 @@ struct sfe_ipv4_tcp_hdr {
 	__be32 seq;
 	__be32 ack_seq;
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u16 res1:4,
-	      doff:4,
-	      fin:1,
-	      syn:1,
-	      rst:1,
-	      psh:1,
-	      ack:1,
-	      urg:1,
-	      ece:1,
-	      cwr:1;
+	   __u16 res1:4,
+		 doff:4,
+		  fin:1,
+		  syn:1,
+		  rst:1,
+		  psh:1,
+		  ack:1,
+		  urg:1,
+		  ece:1,
+		  cwr:1;
 #elif defined(__BIG_ENDIAN_BITFIELD)
-	__u16 doff:4,
-	      res1:4,
-	      cwr:1,
-	      ece:1,
-	      urg:1,
-	      ack:1,
-	      psh:1,
-	      rst:1,
-	      syn:1,
-	      fin:1;
+	   __u16 doff:4,
+		 res1:4,
+		  cwr:1,
+		  ece:1,
+		  urg:1,
+		  ack:1,
+		  psh:1,
+		  rst:1,
+		  syn:1,
+		  fin:1;
 #else
 #error	"Adjust your <asm/byteorder.h> defines"
 #endif
@@ -263,7 +267,7 @@ struct sfe_ipv4_connection_match {
 	uint32_t flow_cookie;		/* used flow cookie, for debug */
 #endif
 #ifdef CONFIG_XFRM
-	uint32_t flow_accel;             /* The flow accelerated or not */
+	uint32_t flow_accel;		/* The flow accelerated or not */
 #endif
 
 	/*
@@ -274,7 +278,8 @@ struct sfe_ipv4_connection_match {
 	} protocol_state;
 	uint32_t rx_packet_count;	/* Number of packets RX'd */
 	uint32_t rx_byte_count;		/* Number of bytes RX'd */
-	uint32_t rx_pack_stat_byte_count; /* Number of bytes RX'd used  with packet stats */
+	uint32_t rx_pack_stat_byte_count; /* Number of bytes RX'd
+					     used with packet stats */
 
 	/*
 	 * Packet translation information.
@@ -309,10 +314,10 @@ struct sfe_ipv4_connection_match {
 	 */
 	uint64_t rx_packet_count64;	/* Number of packets RX'd */
 	uint64_t rx_byte_count64;	/* Number of bytes RX'd */
-	bool addEthMAC;	                /* Add ethernet header if set */
-	sfe_wlan_index_type index;      /* WLAN Interface index. */
-	bool expand_head;               /* Extra headroom needed */
-	bool pad_removal_require;       /* Padding removal required */
+	bool addEthMAC;			/* Add ethernet header if set */
+	sfe_wlan_index_type index;	/* WLAN Interface index. */
+	bool expand_head;		/* Extra headroom needed */
+	bool pad_removal_require;	/* Padding removal required */
 };
 
 /*
@@ -350,11 +355,13 @@ struct sfe_ipv4_connection {
 };
 
 /*Parameters for debugfs*/
+#ifdef CONFIG_DEBUG_FS
 struct dentry *sfe_ipv4_dent;
 struct dentry *sfe_ipv4_entry;
 #define MAX_PROC_SIZE 10
 #define MAX_BUFF_SIZE 1024
 char temp_buff[MAX_BUFF_SIZE];
+#endif
 /*
  * IPv4 connections and hash table size information.
  */
@@ -542,7 +549,7 @@ struct sfe_ipv4 {
 	char ipv4_iface[MAX_INTF_LEN];
 	int iface_length;
 	/*
-	 *  packet stats list
+	 * packet stats list
 	 */
 	struct hlist_head packet_stats_htable[SFE_IPV4_PACKET_STATS_HASH_SIZE]; //hash table
 	uint32_t num_of_pack_stat_nodes;/* Number of nodes in pack stats list */
@@ -553,10 +560,23 @@ struct sfe_ipv4 {
  * Enumeration of the XML output.
  */
 enum sfe_ipv4_debug_xml_states {
+#ifdef CONFIG_DEBUG_FS
 	SFE_IPV4_DEBUG_XML_STATE_CONNECTIONS_CONNECTION,
 	SFE_IPV4_DEBUG_XML_STATE_EXCEPTIONS_EXCEPTION,
 	SFE_IPV4_DEBUG_XML_STATE_STATS,
 	SFE_IPV4_DEBUG_XML_STATE_DONE
+#else
+	SFE_IPV4_DEBUG_XML_STATE_START,
+	SFE_IPV4_DEBUG_XML_STATE_CONNECTIONS_START,
+	SFE_IPV4_DEBUG_XML_STATE_CONNECTIONS_CONNECTION,
+	SFE_IPV4_DEBUG_XML_STATE_CONNECTIONS_END,
+	SFE_IPV4_DEBUG_XML_STATE_EXCEPTIONS_START,
+	SFE_IPV4_DEBUG_XML_STATE_EXCEPTIONS_EXCEPTION,
+	SFE_IPV4_DEBUG_XML_STATE_EXCEPTIONS_END,
+	SFE_IPV4_DEBUG_XML_STATE_STATS,
+	SFE_IPV4_DEBUG_XML_STATE_END,
+	SFE_IPV4_DEBUG_XML_STATE_DONE
+#endif
 };
 
 /*
@@ -568,9 +588,15 @@ struct sfe_ipv4_debug_xml_write_state {
 	int iter_exception;		/* Next exception iterator */
 };
 
+#ifdef CONFIG_DEBUG_FS
 typedef bool (*sfe_ipv4_debug_xml_write_method_t)(struct sfe_ipv4 *si,
 	char *buffer, int *length, int *total_read,
 		struct sfe_ipv4_debug_xml_write_state *ws);
+#else
+typedef bool (*sfe_ipv4_debug_xml_write_method_t)(struct sfe_ipv4 *si,
+	char *buffer, char *msg, size_t *length,
+		int *total_read, struct sfe_ipv4_debug_xml_write_state *ws);
+#endif
 
 struct sfe_ipv4 __si;
 #define CHAR_DEV_MSG_SIZE 768
@@ -719,7 +745,7 @@ static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct 
 
 /*
  * sfe_ipv4_update_packet_stats_connections()
- *	update  the  connections
+ *	update the connections
  *
  * On entry we must be holding the lock that protects the list.
  */
@@ -3673,7 +3699,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	}
 
 	/*
-	   .*  Check for padding removal required
+	 *  Check for padding removal required
 	 *  If packet coming from eth interface then padding removal required
 	 */
 
@@ -4068,12 +4094,59 @@ done:
 }
 
 
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv4_debug_dev_read_start()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv4_debug_dev_read_start(struct sfe_ipv4 *si, char *buffer,
+	 char *msg, size_t *length,
+		int *total_read, struct sfe_ipv4_debug_xml_write_state *ws)
+{
+	int bytes_read;
+
+	si->debug_read_seq++;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "<sfe_ipv4>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+
+/*
+ * sfe_ipv4_debug_dev_read_connections_start()
+ *		Generate part of the XML output.
+ */
+static bool sfe_ipv4_debug_dev_read_connections_start(struct sfe_ipv4 *si,
+	 char *buffer, char *msg, size_t *length,
+		int *total_read, struct sfe_ipv4_debug_xml_write_state *ws)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t<connections>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
+
 
 
 /*
  * sfe_ipv4_debug_dev_read_connections_connection()
  *	Generate part of the XML output.
  */
+#ifdef CONFIG_DEBUG_FS
 static bool sfe_ipv4_debug_dev_read_connections_connection
 (
 	struct sfe_ipv4 *si,
@@ -4188,11 +4261,174 @@ static bool sfe_ipv4_debug_dev_read_connections_connection
 
 	return true;
 }
+#else
+static bool sfe_ipv4_debug_dev_read_connections_connection
+(
+	struct sfe_ipv4 *si, char *buffer, char *msg, size_t *length,
+	int *total_read, struct sfe_ipv4_debug_xml_write_state *ws
+)
+{
+	struct sfe_ipv4_connection *c;
+	struct sfe_ipv4_connection_match *original_cm;
+	struct sfe_ipv4_connection_match *reply_cm;
+	int bytes_read;
+	int protocol;
+	struct net_device *src_dev;
+	__be32 src_ip;
+	__be32 src_ip_xlate;
+	__be16 src_port;
+	__be16 src_port_xlate;
+	uint64_t src_rx_packets;
+	uint64_t src_rx_bytes;
+	struct net_device *dest_dev;
+	__be32 dest_ip;
+	__be32 dest_ip_xlate;
+	__be16 dest_port;
+	__be16 dest_port_xlate;
+	uint64_t dest_rx_packets;
+	uint64_t dest_rx_bytes;
+	uint64_t last_sync_jiffies;
+	uint32_t mark;
+#ifdef CONFIG_NF_FLOW_COOKIE
+	int src_flow_cookie, dst_flow_cookie;
+#endif
+
+	spin_lock_bh(&si->lock);
+
+	for (c = si->all_connections_head; c; c = c->all_connections_next) {
+		if (c->debug_read_seq < si->debug_read_seq) {
+			c->debug_read_seq = si->debug_read_seq;
+			break;
+		}
+	}
+
+	/*
+	 * If there were no connections then move to the next state.
+	 */
+	if (!c) {
+		spin_unlock_bh(&si->lock);
+		ws->state++;
+		return true;
+	}
+
+	original_cm = c->original_match;
+	reply_cm = c->reply_match;
+
+	protocol = c->protocol;
+	src_dev = c->original_dev;
+	src_ip = c->src_ip;
+	src_ip_xlate = c->src_ip_xlate;
+	src_port = c->src_port;
+	src_port_xlate = c->src_port_xlate;
+
+	sfe_ipv4_connection_match_update_summary_stats(original_cm);
+	sfe_ipv4_connection_match_update_summary_stats(reply_cm);
+
+	src_rx_packets = original_cm->rx_packet_count64;
+	src_rx_bytes = original_cm->rx_byte_count64;
+	dest_dev = c->reply_dev;
+	dest_ip = c->dest_ip;
+	dest_ip_xlate = c->dest_ip_xlate;
+	dest_port = c->dest_port;
+	dest_port_xlate = c->dest_port_xlate;
+	dest_rx_packets = reply_cm->rx_packet_count64;
+	dest_rx_bytes = reply_cm->rx_byte_count64;
+	last_sync_jiffies = get_jiffies_64() - c->last_sync_jiffies;
+	mark = c->mark;
+#ifdef CONFIG_NF_FLOW_COOKIE
+	src_flow_cookie = original_cm->flow_cookie;
+	dst_flow_cookie = reply_cm->flow_cookie;
+#endif
+	spin_unlock_bh(&si->lock);
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t\t<connection "
+			"protocol=\"%u\" "
+			"src_dev=\"%s\" "
+			"src_ip=\"%pI4\" src_ip_xlate=\"%pI4\" "
+			"src_port=\"%u\" src_port_xlate=\"%u\" "
+			"src_rx_pkts=\"%llu\" src_rx_bytes=\"%llu\" "
+			"dest_dev=\"%s\" "
+			"dest_ip=\"%pI4\" dest_ip_xlate=\"%pI4\" "
+			"dest_port=\"%u\" dest_port_xlate=\"%u\" "
+			"dest_rx_pkts=\"%llu\" dest_rx_bytes=\"%llu\" "
+#ifdef CONFIG_NF_FLOW_COOKIE
+			"src_flow_cookie=\"%d\" dst_flow_cookie=\"%d\" "
+#endif
+			"last_sync=\"%llu\" "
+			"mark=\"%08x\" />\n",
+			protocol,
+			src_dev->name,
+			&src_ip, &src_ip_xlate,
+			ntohs(src_port), ntohs(src_port_xlate),
+			src_rx_packets, src_rx_bytes,
+			dest_dev->name,
+			&dest_ip, &dest_ip_xlate,
+			ntohs(dest_port), ntohs(dest_port_xlate),
+			dest_rx_packets, dest_rx_bytes,
+#ifdef CONFIG_NF_FLOW_COOKIE
+			src_flow_cookie, dst_flow_cookie,
+#endif
+			last_sync_jiffies, mark);
+
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	return true;
+}
+#endif
+
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv4_debug_dev_read_connections_end()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv4_debug_dev_read_connections_end(struct sfe_ipv4 *si,
+	char *buffer, char *msg, size_t *length,
+		int *total_read, struct sfe_ipv4_debug_xml_write_state *ws)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t</connections>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+
+/*
+ * sfe_ipv4_debug_dev_read_exceptions_start()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv4_debug_dev_read_exceptions_start(struct sfe_ipv4 *si,
+	char *buffer, char *msg, size_t *length,
+		int *total_read, struct sfe_ipv4_debug_xml_write_state *ws)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t<exceptions>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
 
 /*
  * sfe_ipv4_debug_dev_read_exceptions_exception()
  *	Generate part of the XML output.
  */
+#ifdef CONFIG_DEBUG_FS
 static bool sfe_ipv4_debug_dev_read_exceptions_exception
 (
 	struct sfe_ipv4 *si,
@@ -4225,11 +4461,81 @@ static bool sfe_ipv4_debug_dev_read_exceptions_exception
 
 	return true;
 }
+#else
+static bool sfe_ipv4_debug_dev_read_exceptions_exception
+(
+	struct sfe_ipv4 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv4_debug_xml_write_state *ws
+)
+{
+	uint64_t ct;
+
+	spin_lock_bh(&si->lock);
+	ct = si->exception_events64[ws->iter_exception];
+	spin_unlock_bh(&si->lock);
+
+	if (ct) {
+		int bytes_read;
+
+		bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE,
+			"\t\t<exception name=\"%s\" count=\"%llu\" />\n",
+			sfe_ipv4_exception_events_string[ws->iter_exception],
+			ct);
+		if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+			return false;
+
+		*length -= bytes_read;
+		*total_read += bytes_read;
+	}
+
+	ws->iter_exception++;
+	if (ws->iter_exception >= SFE_IPV4_EXCEPTION_EVENT_LAST) {
+		ws->iter_exception = 0;
+		ws->state++;
+	}
+
+	return true;
+}
+#endif
+
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv4_debug_dev_read_exceptions_end()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv4_debug_dev_read_exceptions_end
+(
+	struct sfe_ipv4 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv4_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t</exceptions>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
 
 /*
  * sfe_ipv4_debug_dev_read_stats()
  *	Generate part of the XML output.
  */
+#ifdef CONFIG_DEBUG_FS
 static bool sfe_ipv4_debug_dev_read_stats
 (
 	struct sfe_ipv4 *si,
@@ -4288,16 +4594,122 @@ static bool sfe_ipv4_debug_dev_read_stats
 	ws->state++;
 	return true;
 }
+#else
+static bool sfe_ipv4_debug_dev_read_stats
+(
+	struct sfe_ipv4 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv4_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+	unsigned int num_connections;
+	uint64_t packets_forwarded;
+	uint64_t packets_not_forwarded;
+	uint64_t connection_create_requests;
+	uint64_t connection_create_collisions;
+	uint64_t connection_destroy_requests;
+	uint64_t connection_destroy_misses;
+	uint64_t connection_flushes;
+	uint64_t connection_match_hash_hits;
+	uint64_t connection_match_hash_reorders;
 
+	spin_lock_bh(&si->lock);
+	sfe_ipv4_update_summary_stats(si);
+
+	num_connections = si->num_connections;
+	packets_forwarded = si->packets_forwarded64;
+	packets_not_forwarded = si->packets_not_forwarded64;
+	connection_create_requests = si->connection_create_requests64;
+	connection_create_collisions = si->connection_create_collisions64;
+	connection_destroy_requests = si->connection_destroy_requests64;
+	connection_destroy_misses = si->connection_destroy_misses64;
+	connection_flushes = si->connection_flushes64;
+	connection_match_hash_hits = si->connection_match_hash_hits64;
+	connection_match_hash_reorders = si->connection_match_hash_reorders64;
+	spin_unlock_bh(&si->lock);
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t<stats "
+			"num_connections=\"%u\" "
+			"pkts_forwarded=\"%llu\" pkts_not_forwarded=\"%llu\" "
+			"create_requests=\"%llu\" create_collisions=\"%llu\" "
+			"destroy_requests=\"%llu\" destroy_misses=\"%llu\" "
+			"flushes=\"%llu\" "
+			"hash_hits=\"%llu\" hash_reorders=\"%llu\" />\n",
+			num_connections,
+			packets_forwarded,
+			packets_not_forwarded,
+			connection_create_requests,
+			connection_create_collisions,
+			connection_destroy_requests,
+			connection_destroy_misses,
+			connection_flushes,
+			connection_match_hash_hits,
+			connection_match_hash_reorders);
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
+
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv4_debug_dev_read_end()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv4_debug_dev_read_end
+(
+	struct sfe_ipv4 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv4_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "</sfe_ipv4>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
 
 /*
  * Array of write functions that write various XML elements that correspond to
  * our XML output state machine.
  */
 sfe_ipv4_debug_xml_write_method_t sfe_ipv4_debug_xml_write_methods[SFE_IPV4_DEBUG_XML_STATE_DONE] = {
+#ifdef CONFIG_DEBUG_FS
 	sfe_ipv4_debug_dev_read_connections_connection,
 	sfe_ipv4_debug_dev_read_exceptions_exception,
 	sfe_ipv4_debug_dev_read_stats,
+#else
+	sfe_ipv4_debug_dev_read_start,
+	sfe_ipv4_debug_dev_read_connections_start,
+	sfe_ipv4_debug_dev_read_connections_connection,
+	sfe_ipv4_debug_dev_read_connections_end,
+	sfe_ipv4_debug_dev_read_exceptions_start,
+	sfe_ipv4_debug_dev_read_exceptions_exception,
+	sfe_ipv4_debug_dev_read_exceptions_end,
+	sfe_ipv4_debug_dev_read_stats,
+	sfe_ipv4_debug_dev_read_end,
+
+#endif
 };
 
 /*
@@ -4306,6 +4718,7 @@ sfe_ipv4_debug_xml_write_method_t sfe_ipv4_debug_xml_write_methods[SFE_IPV4_DEBU
  */
 static ssize_t sfe_ipv4_debug_dev_read(struct file *filp, char *buffer, size_t length, loff_t *offset)
 {
+#ifdef CONFIG_DEBUG_FS
 	struct sfe_ipv4_debug_xml_write_state *ws;
 	int total_read = SFE_DEBUGFS_READ_LEN, len = 0;
 	ssize_t ret_cnt = 0;
@@ -4342,6 +4755,22 @@ static ssize_t sfe_ipv4_debug_dev_read(struct file *filp, char *buffer, size_t l
 	kfree(ws);
 
 	return ret_cnt;
+#else
+	char msg[CHAR_DEV_MSG_SIZE];
+	int total_read = 0;
+	struct sfe_ipv4_debug_xml_write_state *ws;
+	struct sfe_ipv4 *si = &__si;
+
+	ws = (struct sfe_ipv4_debug_xml_write_state *)filp->private_data;
+	while ((ws->state != SFE_IPV4_DEBUG_XML_STATE_DONE)
+				&& (length > CHAR_DEV_MSG_SIZE)) {
+		if ((sfe_ipv4_debug_xml_write_methods[ws->state])
+			(si, buffer, msg, &length, &total_read, ws))
+			continue;
+	}
+
+	return total_read;
+#endif
 }
 
 /*
@@ -4351,6 +4780,7 @@ static ssize_t sfe_ipv4_debug_dev_read(struct file *filp, char *buffer, size_t l
 static ssize_t sfe_ipv4_debug_dev_write(struct file *filp, const char *buffer, size_t length, loff_t *offset)
 {
 	struct sfe_ipv4 *si = &__si;
+#ifdef CONFIG_DEBUG_FS
 	bool write_ops = 0;
 
 	memset(temp_buff, 0, sizeof(temp_buff));
@@ -4381,6 +4811,23 @@ static ssize_t sfe_ipv4_debug_dev_write(struct file *filp, const char *buffer, s
 
 write_done:
 	return length;
+#else
+	spin_lock_bh(&si->lock);
+	sfe_ipv4_update_summary_stats(si);
+
+	si->packets_forwarded64 = 0;
+	si->packets_not_forwarded64 = 0;
+	si->connection_create_requests64 = 0;
+	si->connection_create_collisions64 = 0;
+	si->connection_destroy_requests64 = 0;
+	si->connection_destroy_misses64 = 0;
+	si->connection_flushes64 = 0;
+	si->connection_match_hash_hits64 = 0;
+	si->connection_match_hash_reorders64 = 0;
+	spin_unlock_bh(&si->lock);
+
+	return length;
+#endif
 }
 
 /*
@@ -4396,8 +4843,11 @@ static int sfe_ipv4_debug_dev_open(struct inode *inode, struct file *file)
 		if (!ws) {
 			return -ENOMEM;
 		}
-
+#ifdef CONFIG_DEBUG_FS
 		ws->state = SFE_IPV4_DEBUG_XML_STATE_CONNECTIONS_CONNECTION;
+#else
+		ws->state = SFE_IPV4_DEBUG_XML_STATE_START;
+#endif
 		file->private_data = ws;
 	}
 
@@ -4428,9 +4878,14 @@ static int sfe_ipv4_debug_dev_release(struct inode *inode, struct file *file)
 static struct file_operations sfe_ipv4_debug_dev_fops = {
 	.read = sfe_ipv4_debug_dev_read,
 	.write = sfe_ipv4_debug_dev_write,
+#ifdef CONFIG_DEBUG_FS
 	.open = simple_open,
 	.owner = THIS_MODULE,
 	.llseek = default_llseek,
+#else
+	.open = sfe_ipv4_debug_dev_open,
+	.release = sfe_ipv4_debug_dev_release
+#endif
 };
 
 static ssize_t read_from_v4_iface_proc_entry(struct file *filp,char *buf,size_t count,loff_t *offp )
@@ -4539,8 +4994,10 @@ static int __init sfe_ipv4_init(void)
 
 	DEBUG_INFO("SFE IPv4 init\n");
 
+#ifdef CONFIG_DEBUG_FS
 	/*register debugfs*/
 	sfe_ipv4_dent = debugfs_create_dir("sfe_ipv4", NULL);
+#endif
 	/*register proc sys*/
 	si->proc.sfe_debug_ctl_path[0].procname = "debug";
 	si->proc.debug_root[0].procname = "sfe";
@@ -4562,7 +5019,11 @@ static int __init sfe_ipv4_init(void)
 	si->sys_sfe_ipv4 = kobject_create_and_add("sfe_ipv4", NULL);
 	if (!si->sys_sfe_ipv4) {
 		DEBUG_ERROR("failed to register sfe_ipv4\n");
+#ifdef CONFIG_DEBUG_FS
 		goto exit2;
+#else
+		goto exit1;
+#endif
 	}
 
 	/*
@@ -4571,7 +5032,11 @@ static int __init sfe_ipv4_init(void)
 	result = sysfs_create_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_dev_attr.attr);
 	if (result) {
 		DEBUG_ERROR("failed to register debug dev file: %d\n", result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit3;
+#else
+		goto exit4;
+#endif
 	}
 
 	/*
@@ -4592,12 +5057,17 @@ static int __init sfe_ipv4_init(void)
 		DEBUG_ERROR(
 			"failed debug level low file: %d for ipv4 connection\n",
 			result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit5;
+#else
+		goto exit4;
+#endif
 	}
 
 	/*
 	 * Register our debug char device.
 	 */
+#ifdef CONFIG_DEBUG_FS
 	sfe_ipv4_entry = debugfs_create_file(
 			"sfe_ipv4_debug", (SFE_DEBUGFS_RW_PERM),
 				sfe_ipv4_dent, 0, &sfe_ipv4_debug_dev_fops);
@@ -4606,6 +5076,13 @@ static int __init sfe_ipv4_init(void)
 		result = -EFAULT;
 		goto exit6;
 	}
+#else
+	result = register_chrdev(0, "sfe_ipv4", &sfe_ipv4_debug_dev_fops);
+	if (result < 0) {
+		DEBUG_ERROR("Failed to register chrdev: %d\n", result);
+		goto exit5;
+	}
+#endif
 
 	si->debug_dev = result;
 
@@ -4615,7 +5092,11 @@ static int __init sfe_ipv4_init(void)
 	si->sys_sfe_ipv4_packet_stats = kobject_create_and_add("sfe_packet_stats_ipv4", NULL);
 	if (!si->sys_sfe_ipv4_packet_stats) {
 		DEBUG_ERROR("failed to register sfe_packet_stats_ipv4\n");
+#ifdef CONFIG_DEBUG_FS
 		goto exit6;
+#else
+		goto exit1;
+#endif
 	}
 
 	/*
@@ -4624,7 +5105,11 @@ static int __init sfe_ipv4_init(void)
 	result = sysfs_create_file(si->sys_sfe_ipv4_packet_stats, &sfe_ipv4_packet_stats_dev_attr.attr);
 	if (result) {
 		DEBUG_ERROR("failed to register ipv4 packet stat dev file: %d\n", result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit7;
+#else
+		goto exit4;
+#endif
 	}
 
 	/*
@@ -4633,7 +5118,11 @@ static int __init sfe_ipv4_init(void)
 	result = register_chrdev(0, "sfe_packet_stats_ipv4", &sfe_ipv4_packet_stats_fops);
 	if (result < 0) {
 		DEBUG_ERROR("Failed to register ipv4 packet stats chrdev: %d\n", result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit8;
+#else
+		goto exit5;
+#endif
 	}
 
 	si->packet_stats_dev = result;
@@ -4654,6 +5143,7 @@ static int __init sfe_ipv4_init(void)
 
 	return 0;
 
+#ifdef CONFIG_DEBUG_FS
 exit8:
 	sysfs_remove_file(si->sys_sfe_ipv4_packet_stats, &sfe_ipv4_packet_stats_dev_attr.attr);
 
@@ -4679,6 +5169,20 @@ exit1:
 	if (sfe_ipv4_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv4_dent);
 	return result;
+#else
+exit5:
+	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_dev_attr.attr);
+	sysfs_remove_file(si->sys_sfe_ipv4_packet_stats,
+				&sfe_ipv4_packet_stats_dev_attr.attr);
+
+exit4:
+	kobject_put(si->sys_sfe_ipv4);
+	kobject_put(si->sys_sfe_ipv4_packet_stats);
+
+
+exit1:
+	return result;
+#endif
 }
 
 /*
@@ -4710,8 +5214,10 @@ static void __exit sfe_ipv4_exit(void)
 	remove_proc_entry("ipv4_iface_name",NULL);
 
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_dev_attr.attr);
+#ifdef CONFIG_DEBUG_FS
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_debug_level.attr);
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_debug_level_low.attr);
+#endif
 
 	kobject_put(si->sys_sfe_ipv4);
 	if (ipc_sfe_log_ctxt != NULL)
@@ -4719,9 +5225,10 @@ static void __exit sfe_ipv4_exit(void)
 
 	if (ipc_sfe_log_ctxt_low != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
-
+#ifdef CONFIG_DEBUG_FS
 	if (sfe_ipv4_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv4_dent);
+#endif
 
 }
 
