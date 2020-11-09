@@ -30,7 +30,9 @@
 #include <linux/if_vlan.h>
 #include <linux/init.h>
 #endif
+#ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
+#endif
 #include "sfe.h"
 #include "sfe_cm.h"
 
@@ -43,8 +45,10 @@
 #define CISCO_HDLC_SIZE 4
 #define INNER_HDR_SIZE 14
 #endif
+#ifdef CONFIG_DEBUG_FS
 #define SFE_DEBUGFS_V6_RW_PERM 0664
 #define SFE_DEBUGFS_V6_READ_LEN 3000
+#endif
 
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
@@ -54,13 +58,13 @@ bool iface;
 int packet_stats_enabled = PACKETS_STATS_ENABLED;
 
 
-#define XDBG_ADD_PROC_ENTRY(it, name, xdata)             \
-{                                                 \
-	.procname       = (name),                 \
-	.data           = (xdata),                \
-	.maxlen         = sizeof(int),            \
-	.mode           = 0666,                   \
-	.proc_handler   = &proc_dointvec,         \
+#define XDBG_ADD_PROC_ENTRY(it, name, xdata)   \
+{                                              \
+	.procname       = (name),              \
+	.data           = (xdata),             \
+	.maxlen         = sizeof(int),         \
+	.mode           = 0666,                \
+	.proc_handler   = &proc_dointvec,      \
 }
 
 enum {
@@ -129,10 +133,10 @@ struct sfe_ipv6_eth_hdr {
 struct sfe_ipv6_ip_hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8 priority:4,
-	     version:4;
+	      version:4;
 #elif defined(__BIG_ENDIAN_BITFIELD)
 	__u8 version:4,
-	     priority:4;
+	    priority:4;
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
@@ -202,27 +206,27 @@ struct sfe_ipv6_tcp_hdr {
 	__be32 seq;
 	__be32 ack_seq;
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u16 res1:4,
-	      doff:4,
-	      fin:1,
-	      syn:1,
-	      rst:1,
-	      psh:1,
-	      ack:1,
-	      urg:1,
-	      ece:1,
-	      cwr:1;
+	   __u16 res1:4,
+		 doff:4,
+		  fin:1,
+		  syn:1,
+		  rst:1,
+		  psh:1,
+		  ack:1,
+		  urg:1,
+		  ece:1,
+		  cwr:1;
 #elif defined(__BIG_ENDIAN_BITFIELD)
-	__u16 doff:4,
-	      res1:4,
-	      cwr:1,
-	      ece:1,
-	      urg:1,
-	      ack:1,
-	      psh:1,
-	      rst:1,
-	      syn:1,
-	      fin:1;
+	   __u16 doff:4,
+		 res1:4,
+		  cwr:1,
+		  ece:1,
+		  urg:1,
+		  ack:1,
+		  psh:1,
+		  rst:1,
+		  syn:1,
+		  fin:1;
 #else
 #error	"Adjust your <asm/byteorder.h> defines"
 #endif
@@ -301,7 +305,7 @@ struct sfe_ipv6_connection_match {
 	uint32_t flow_cookie;		/* used flow cookie, for debug */
 #endif
 #ifdef CONFIG_XFRM
-	uint32_t flow_accel;            /* The flow accelerated or not */
+	uint32_t flow_accel;		/* The flow accelerated or not */
 #endif
 
 	/*
@@ -342,9 +346,9 @@ struct sfe_ipv6_connection_match {
 	 */
 	uint64_t rx_packet_count64;	/* Number of packets RX'd */
 	uint64_t rx_byte_count64;	/* Number of bytes RX'd */
-	bool addEthMAC;                 /* Add ethernet header if set */
-	sfe_wlan_index_type index;      /* WLAN Interface index. */
-	bool expand_head;               /* Extra headroom needed */
+	bool addEthMAC;			/* Add ethernet header if set */
+	sfe_wlan_index_type index;	/* WLAN Interface index. */
+	bool expand_head;		/* Extra headroom needed */
 	bool pad_removal_require;
 };
 
@@ -567,13 +571,13 @@ struct sfe_ipv6 {
 	uint32_t pack_stats_read_seq;	/* sequence number for packet stats dump */
 
 	/*
-	 *  Proc entry for Interface name
+	 * Proc entry for Interface name
 	 */
 	char ipv6_iface[MAX_INTF_LEN];
 	int iface_length;
 
 	/*
-	 *  packet stats list
+	 * packet stats list
 	 */
 	struct hlist_head packet_stats_htable[SFE_IPV6_PACKET_STATS_HASH_SIZE]; //hash table
 	uint32_t num_of_pack_stat_nodes;/* Number of nodes in pack stats list */
@@ -583,18 +587,33 @@ struct sfe_ipv6 {
  * Enumeration of the XML output.
  */
 enum sfe_ipv6_debug_xml_states {
+#ifdef CONFIG_DEBUG_FS
 	SFE_IPV6_DEBUG_XML_STATE_CONNECTIONS_CONNECTION,
 	SFE_IPV6_DEBUG_XML_STATE_EXCEPTIONS_EXCEPTION,
 	SFE_IPV6_DEBUG_XML_STATE_STATS,
 	SFE_IPV6_DEBUG_XML_STATE_DONE
+#else
+	SFE_IPV6_DEBUG_XML_STATE_START,
+	SFE_IPV6_DEBUG_XML_STATE_CONNECTIONS_START,
+	SFE_IPV6_DEBUG_XML_STATE_CONNECTIONS_CONNECTION,
+	SFE_IPV6_DEBUG_XML_STATE_CONNECTIONS_END,
+	SFE_IPV6_DEBUG_XML_STATE_EXCEPTIONS_START,
+	SFE_IPV6_DEBUG_XML_STATE_EXCEPTIONS_EXCEPTION,
+	SFE_IPV6_DEBUG_XML_STATE_EXCEPTIONS_END,
+	SFE_IPV6_DEBUG_XML_STATE_STATS,
+	SFE_IPV6_DEBUG_XML_STATE_END,
+	SFE_IPV6_DEBUG_XML_STATE_DONE
+#endif
 };
 
+#ifdef CONFIG_DEBUG_FS
 /*Parameters for debugfs*/
 struct dentry *sfe_ipv6_dent;
 struct dentry *sfe_ipv6_entry;
 #define MAX_PROC_SIZE 10
 #define MAX_BUFF_SIZE 1024
 char temp_buff[MAX_BUFF_SIZE];
+#endif
 
 /*
  * XML write state.
@@ -605,9 +624,15 @@ struct sfe_ipv6_debug_xml_write_state {
 	int iter_exception;		/* Next exception iterator */
 };
 
+#ifdef CONFIG_DEBUG_FS
 typedef bool (*sfe_ipv6_debug_xml_write_method_t)(struct sfe_ipv6 *si,
 			char *buffer, int *length, int *total_read,
 				struct sfe_ipv6_debug_xml_write_state *ws);
+#else
+typedef bool (*sfe_ipv6_debug_xml_write_method_t)(struct sfe_ipv6 *si,
+			 char *buffer, char *msg, size_t *length,
+		int *total_read, struct sfe_ipv6_debug_xml_write_state *ws);
+#endif
 
 struct sfe_ipv6 __si6;
 /*
@@ -741,7 +766,7 @@ struct nl_rx_buffer
 struct sfe_ipv6_packet_stats_list
 {
 	uint32_t packet_stat_node_read_seq;
-	/* Next  entry in a list */
+	/* Next	 entry in a list */
 	struct hlist_node sfe_ipv6_packet_hash_list;
 	struct sfe_ipv6_packet_stats_node packet_stats_node;
 };
@@ -864,7 +889,7 @@ static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct 
 
 /*
  * sfe_ipv6_update_packet_stats_connections()
- *	update  the  connections
+ *	update the connections
  *
  * On entry we must be holding the lock that protects the list.
  */
@@ -4169,6 +4194,7 @@ static bool sfe_ipv6_debug_dev_read_connections_start(struct sfe_ipv6 *si, char 
  * sfe_ipv6_debug_dev_read_connections_connection()
  *	Generate part of the XML output.
  */
+#ifdef CONFIG_DEBUG_FS
 static bool sfe_ipv6_debug_dev_read_connections_connection
 (
 	struct sfe_ipv6 *si,
@@ -4283,7 +4309,186 @@ static bool sfe_ipv6_debug_dev_read_connections_connection
 
 	return true;
 }
+#else
+static bool sfe_ipv6_debug_dev_read_connections_connection
+(
+	struct sfe_ipv6 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv6_debug_xml_write_state *ws
+)
+{
+	struct sfe_ipv6_connection *c;
+	struct sfe_ipv6_connection_match *original_cm;
+	struct sfe_ipv6_connection_match *reply_cm;
+	int bytes_read;
+	int protocol;
+	struct net_device *src_dev;
+	struct sfe_ipv6_addr src_ip;
+	struct sfe_ipv6_addr src_ip_xlate;
+	__be16 src_port;
+	__be16 src_port_xlate;
+	uint64_t src_rx_packets;
+	uint64_t src_rx_bytes;
+	struct net_device *dest_dev;
+	struct sfe_ipv6_addr dest_ip;
+	struct sfe_ipv6_addr dest_ip_xlate;
+	__be16 dest_port;
+	__be16 dest_port_xlate;
+	uint64_t dest_rx_packets;
+	uint64_t dest_rx_bytes;
+	uint64_t last_sync_jiffies;
+	uint32_t mark;
+#ifdef CONFIG_NF_FLOW_COOKIE
+	int src_flow_cookie, dst_flow_cookie;
+#endif
 
+	spin_lock_bh(&si->lock);
+
+	for (c = si->all_connections_head; c; c = c->all_connections_next) {
+		if (c->debug_read_seq < si->debug_read_seq) {
+			c->debug_read_seq = si->debug_read_seq;
+			break;
+		}
+	}
+
+	/*
+	 * If there were no connections then move to the next state.
+	 */
+	if (!c) {
+		spin_unlock_bh(&si->lock);
+		ws->state++;
+		return true;
+	}
+
+	original_cm = c->original_match;
+	reply_cm = c->reply_match;
+
+	protocol = c->protocol;
+	src_dev = c->original_dev;
+	src_ip = c->src_ip[0];
+	src_ip_xlate = c->src_ip_xlate[0];
+	src_port = c->src_port;
+	src_port_xlate = c->src_port_xlate;
+
+	sfe_ipv6_connection_match_update_summary_stats(original_cm);
+	sfe_ipv6_connection_match_update_summary_stats(reply_cm);
+
+	src_rx_packets = original_cm->rx_packet_count64;
+	src_rx_bytes = original_cm->rx_byte_count64;
+	dest_dev = c->reply_dev;
+	dest_ip = c->dest_ip[0];
+	dest_ip_xlate = c->dest_ip_xlate[0];
+	dest_port = c->dest_port;
+	dest_port_xlate = c->dest_port_xlate;
+	dest_rx_packets = reply_cm->rx_packet_count64;
+	dest_rx_bytes = reply_cm->rx_byte_count64;
+	last_sync_jiffies = get_jiffies_64() - c->last_sync_jiffies;
+	mark = c->mark;
+#ifdef CONFIG_NF_FLOW_COOKIE
+	src_flow_cookie = original_cm->flow_cookie;
+	dst_flow_cookie = reply_cm->flow_cookie;
+#endif
+	spin_unlock_bh(&si->lock);
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t\t<connection "
+			"protocol=\"%u\" "
+			"src_dev=\"%s\" "
+			"src_ip=\"%pI6\" src_ip_xlate=\"%pI6\" "
+			"src_port=\"%u\" src_port_xlate=\"%u\" "
+			"src_rx_pkts=\"%llu\" src_rx_bytes=\"%llu\" "
+			"dest_dev=\"%s\" "
+			"dest_ip=\"%pI6\" dest_ip_xlate=\"%pI6\" "
+			"dest_port=\"%u\" dest_port_xlate=\"%u\" "
+			"dest_rx_pkts=\"%llu\" dest_rx_bytes=\"%llu\" "
+#ifdef CONFIG_NF_FLOW_COOKIE
+			"src_flow_cookie=\"%d\" dst_flow_cookie=\"%d\" "
+#endif
+			"last_sync=\"%llu\" "
+			"mark=\"%08x\" />\n",
+			protocol,
+			src_dev->name,
+			&src_ip, &src_ip_xlate,
+			ntohs(src_port), ntohs(src_port_xlate),
+			src_rx_packets, src_rx_bytes,
+			dest_dev->name,
+			&dest_ip, &dest_ip_xlate,
+			ntohs(dest_port), ntohs(dest_port_xlate),
+			dest_rx_packets, dest_rx_bytes,
+#ifdef CONFIG_NF_FLOW_COOKIE
+			src_flow_cookie, dst_flow_cookie,
+#endif
+			last_sync_jiffies, mark);
+
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	return true;
+}
+#endif
+
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv6_debug_dev_read_connections_end()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv6_debug_dev_read_connections_end
+(
+	struct sfe_ipv6 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv6_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t</connections>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+
+/*
+ * sfe_ipv6_debug_dev_read_exceptions_start()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv6_debug_dev_read_exceptions_start
+(
+	struct sfe_ipv6 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv6_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t<exceptions>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
+
+#ifdef CONFIG_DEBUG_FS
 /*
  * sfe_ipv6_debug_dev_read_exceptions_exception()
  *	Generate part of the XML output.
@@ -4319,7 +4524,78 @@ static bool sfe_ipv6_debug_dev_read_exceptions_exception
 
 	return true;
 }
+#else
+static bool sfe_ipv6_debug_dev_read_exceptions_exception
+(
+	struct sfe_ipv6 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv6_debug_xml_write_state *ws
+)
+{
+	uint64_t ct;
 
+	spin_lock_bh(&si->lock);
+	ct = si->exception_events64[ws->iter_exception];
+	spin_unlock_bh(&si->lock);
+
+	if (ct) {
+		int bytes_read;
+
+		bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE,
+			"\t\t<exception name=\"%s\" count=\"%llu\" />\n",
+			sfe_ipv6_exception_events_string[ws->iter_exception],
+			ct);
+		if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+			return false;
+
+		*length -= bytes_read;
+		*total_read += bytes_read;
+	}
+
+	ws->iter_exception++;
+	if (ws->iter_exception >= SFE_IPV6_EXCEPTION_EVENT_LAST) {
+		ws->iter_exception = 0;
+		ws->state++;
+	}
+
+	return true;
+}
+#endif
+
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv6_debug_dev_read_exceptions_end()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv6_debug_dev_read_exceptions_end
+(
+	struct sfe_ipv6 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv6_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t</exceptions>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE)) {
+		return false;
+	}
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
+
+#ifdef CONFIG_DEBUG_FS
 /*
  * sfe_ipv6_debug_dev_read_stats()
  *	Generate part of the XML output.
@@ -4381,15 +4657,121 @@ static bool sfe_ipv6_debug_dev_read_stats
 	ws->state++;
 	return true;
 }
+#else
+static bool sfe_ipv6_debug_dev_read_stats
+(
+	struct sfe_ipv6 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv6_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+	unsigned int num_connections;
+	uint64_t packets_forwarded;
+	uint64_t packets_not_forwarded;
+	uint64_t connection_create_requests;
+	uint64_t connection_create_collisions;
+	uint64_t connection_destroy_requests;
+	uint64_t connection_destroy_misses;
+	uint64_t connection_flushes;
+	uint64_t connection_match_hash_hits;
+	uint64_t connection_match_hash_reorders;
+
+	spin_lock_bh(&si->lock);
+	sfe_ipv6_update_summary_stats(si);
+
+	num_connections = si->num_connections;
+	packets_forwarded = si->packets_forwarded64;
+	packets_not_forwarded = si->packets_not_forwarded64;
+	connection_create_requests = si->connection_create_requests64;
+	connection_create_collisions = si->connection_create_collisions64;
+	connection_destroy_requests = si->connection_destroy_requests64;
+	connection_destroy_misses = si->connection_destroy_misses64;
+	connection_flushes = si->connection_flushes64;
+	connection_match_hash_hits = si->connection_match_hash_hits64;
+	connection_match_hash_reorders = si->connection_match_hash_reorders64;
+	spin_unlock_bh(&si->lock);
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "\t<stats "
+			"num_connections=\"%u\" "
+			"pkts_forwarded=\"%llu\" pkts_not_forwarded=\"%llu\" "
+			"create_requests=\"%llu\" create_collisions=\"%llu\" "
+			"destroy_requests=\"%llu\" destroy_misses=\"%llu\" "
+			"flushes=\"%llu\" "
+			"hash_hits=\"%llu\" hash_reorders=\"%llu\" />\n",
+			num_connections,
+			packets_forwarded,
+			packets_not_forwarded,
+			connection_create_requests,
+			connection_create_collisions,
+			connection_destroy_requests,
+			connection_destroy_misses,
+			connection_flushes,
+			connection_match_hash_hits,
+			connection_match_hash_reorders);
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
+
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv6_debug_dev_read_end()
+ *	Generate part of the XML output.
+ */
+static bool sfe_ipv6_debug_dev_read_end
+(
+	struct sfe_ipv6 *si,
+	char *buffer,
+	char *msg,
+	size_t *length,
+	int *total_read,
+	struct sfe_ipv6_debug_xml_write_state *ws
+)
+{
+	int bytes_read;
+
+	bytes_read = snprintf(msg, CHAR_DEV_MSG_SIZE, "</sfe_ipv6>\n");
+	if (copy_to_user(buffer + *total_read, msg, CHAR_DEV_MSG_SIZE))
+		return false;
+
+	*length -= bytes_read;
+	*total_read += bytes_read;
+
+	ws->state++;
+	return true;
+}
+#endif
 
 /*
  * Array of write functions that write various XML elements that correspond to
  * our XML output state machine.
  */
 static sfe_ipv6_debug_xml_write_method_t sfe_ipv6_debug_xml_write_methods[SFE_IPV6_DEBUG_XML_STATE_DONE] = {
+#ifdef CONFIG_DEBUG_FS
 	sfe_ipv6_debug_dev_read_connections_connection,
 	sfe_ipv6_debug_dev_read_exceptions_exception,
 	sfe_ipv6_debug_dev_read_stats,
+#else
+	sfe_ipv6_debug_dev_read_start,
+	sfe_ipv6_debug_dev_read_connections_start,
+	sfe_ipv6_debug_dev_read_connections_connection,
+	sfe_ipv6_debug_dev_read_connections_end,
+	sfe_ipv6_debug_dev_read_exceptions_start,
+	sfe_ipv6_debug_dev_read_exceptions_exception,
+	sfe_ipv6_debug_dev_read_exceptions_end,
+	sfe_ipv6_debug_dev_read_stats,
+	sfe_ipv6_debug_dev_read_end,
+#endif
 };
 
 /*
@@ -4398,6 +4780,7 @@ static sfe_ipv6_debug_xml_write_method_t sfe_ipv6_debug_xml_write_methods[SFE_IP
  */
 static ssize_t sfe_ipv6_debug_dev_read(struct file *filp, char *buffer, size_t length, loff_t *offset)
 {
+#ifdef CONFIG_DEBUG_FS
 	int total_read = SFE_DEBUGFS_V6_READ_LEN, len = 0;
 	struct sfe_ipv6_debug_xml_write_state *ws;
 	struct sfe_ipv6 *si = &__si6;
@@ -4434,7 +4817,22 @@ static ssize_t sfe_ipv6_debug_dev_read(struct file *filp, char *buffer, size_t l
 	kfree(ws);
 
 	return ret_cnt;
+#else
+	char msg[CHAR_DEV_MSG_SIZE];
+	int total_read = 0;
+	struct sfe_ipv6_debug_xml_write_state *ws;
+	struct sfe_ipv6 *si = &__si6;
 
+	ws = (struct sfe_ipv6_debug_xml_write_state *)filp->private_data;
+	while ((ws->state != SFE_IPV6_DEBUG_XML_STATE_DONE) &&
+					(length > CHAR_DEV_MSG_SIZE)) {
+		if ((sfe_ipv6_debug_xml_write_methods[ws->state])(
+			si, buffer, msg, &length, &total_read, ws))
+			continue;
+	}
+
+	return total_read;
+#endif
 }
 
 /*
@@ -4462,6 +4860,28 @@ static ssize_t sfe_ipv6_debug_dev_write(struct file *filp, const char *buffer, s
 	return length;
 }
 
+#ifndef CONFIG_DEBUG_FS
+/*
+ * sfe_ipv6_debug_dev_open()
+ */
+static int sfe_ipv6_debug_dev_open(struct inode *inode, struct file *file)
+{
+	struct sfe_ipv6_debug_xml_write_state *ws;
+
+	ws = (struct sfe_ipv6_debug_xml_write_state *)file->private_data;
+	if (ws)
+		return 0;
+
+	ws = kzalloc(sizeof(struct sfe_ipv6_debug_xml_write_state), GFP_KERNEL);
+	if (!ws)
+		return -ENOMEM;
+
+	ws->state = SFE_IPV6_DEBUG_XML_STATE_START;
+	file->private_data = ws;
+
+	return 0;
+}
+#endif
 
 /*
  * sfe_ipv6_debug_dev_release()
@@ -4485,11 +4905,18 @@ static int sfe_ipv6_debug_dev_release(struct inode *inode, struct file *file)
  * File operations used in the debug char device
  */
 static struct file_operations sfe_ipv6_debug_dev_fops = {
+#ifdef CONFIG_DEBUG_FS
 	.read = sfe_ipv6_debug_dev_read,
 	.write = sfe_ipv6_debug_dev_write,
 	.open = simple_open,
 	.owner = THIS_MODULE,
 	.llseek = default_llseek,
+#else
+	.read = sfe_ipv6_debug_dev_read,
+	.write = sfe_ipv6_debug_dev_write,
+	.open = sfe_ipv6_debug_dev_open,
+	.release = sfe_ipv6_debug_dev_release
+#endif
 
 };
 
@@ -4602,8 +5029,10 @@ static int __init sfe_ipv6_init(void)
 
 	DEBUG_INFO("SFE IPv6 init\n");
 
+#ifdef CONFIG_DEBUG_FS
 	/*register debugfs*/
 	sfe_ipv6_dent = debugfs_create_dir("sfe_ipv6", NULL);
+#endif
 
 	/*register proc sys*/
 	si->proc1.sfe_debug_ctl_path[0].procname = "debug_v6";
@@ -4628,7 +5057,11 @@ static int __init sfe_ipv6_init(void)
 	si->sys_sfe_ipv6 = kobject_create_and_add("sfe_ipv6", NULL);
 	if (!si->sys_sfe_ipv6) {
 		DEBUG_ERROR("failed to register sfe_ipv6\n");
+#ifdef CONFIG_DEBUG_FS
 		goto exit2;
+#else
+		goto exit1;
+#endif
 	}
 
 	/*
@@ -4637,7 +5070,11 @@ static int __init sfe_ipv6_init(void)
 	result = sysfs_create_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_dev_attr.attr);
 	if (result) {
 		DEBUG_ERROR("failed to register debug dev file: %d\n", result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit3;
+#else
+		goto exit2;
+#endif
 	}
 
 	/*
@@ -4647,7 +5084,11 @@ static int __init sfe_ipv6_init(void)
 	if (result) {
 		DEBUG_ERROR("failed debug level file: %d for ipv6 connection",
 			result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit4;
+#else
+		goto exit2;
+#endif
 	}
 
 	/*
@@ -4658,9 +5099,14 @@ static int __init sfe_ipv6_init(void)
 		DEBUG_ERROR(
 			"failed debug level low file: %d for ipv6 connection\n",
 			result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit5;
+#else
+		goto exit2;
+#endif
 	}
 
+#ifdef CONFIG_DEBUG_FS
 	sfe_ipv6_entry = debugfs_create_file("sfe_ipv6_debug",
 		(SFE_DEBUGFS_V6_RW_PERM), sfe_ipv6_dent, 0,
 					&sfe_ipv6_debug_dev_fops);
@@ -4669,6 +5115,16 @@ static int __init sfe_ipv6_init(void)
 		result = -EFAULT;
 		goto exit6;
 	}
+#else
+	/*
+	 * Register our debug char device.
+	 */
+	result = register_chrdev(0, "sfe_ipv6", &sfe_ipv6_debug_dev_fops);
+	if (result < 0) {
+		DEBUG_ERROR("Failed to register chrdev: %d\n", result);
+		goto exit3;
+	}
+#endif
 
 	si->debug_dev = result;
 
@@ -4678,7 +5134,11 @@ static int __init sfe_ipv6_init(void)
 	si->sys_sfe_ipv6_packet_stats = kobject_create_and_add("sfe_packet_stats_ipv6", NULL);
 	if (!si->sys_sfe_ipv6_packet_stats) {
 		DEBUG_ERROR("failed to register sfe_packet_stats_ipv6\n");
+#ifdef CONFIG_DEBUG_FS
 		goto exit6;
+#else
+		goto exit1;
+#endif
 	}
 
 	/*
@@ -4687,7 +5147,11 @@ static int __init sfe_ipv6_init(void)
 	result = sysfs_create_file(si->sys_sfe_ipv6_packet_stats, &sfe_ipv6_packet_stats_dev_attr.attr);
 	if (result) {
 		DEBUG_ERROR("failed to register packet stat dev file: %d\n", result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit7;
+#else
+		goto exit2;
+#endif
 	}
 
 	/*
@@ -4696,7 +5160,11 @@ static int __init sfe_ipv6_init(void)
 	result = register_chrdev(0, "sfe_packet_stats_ipv6", &sfe_ipv6_packet_stats_fops);
 	if (result < 0) {
 		DEBUG_ERROR("Failed to register packet stats chrdev: %d\n", result);
+#ifdef CONFIG_DEBUG_FS
 		goto exit8;
+#else
+		goto exit3;
+#endif
 	}
 
 	si->packet_stats_dev = result;
@@ -4717,6 +5185,7 @@ static int __init sfe_ipv6_init(void)
 
 	return 0;
 
+#ifdef CONFIG_DEBUG_FS
 exit8:
 	sysfs_remove_file(si->sys_sfe_ipv6_packet_stats, &sfe_ipv6_packet_stats_dev_attr.attr);
 
@@ -4742,6 +5211,18 @@ exit1:
 	if (sfe_ipv6_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv6_dent);
 	return result;
+#else
+exit3:
+	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_dev_attr.attr);
+	sysfs_remove_file(si->sys_sfe_ipv6_packet_stats,
+				&sfe_ipv6_packet_stats_dev_attr.attr);
+
+exit2:
+	kobject_put(si->sys_sfe_ipv6);
+	kobject_put(si->sys_sfe_ipv6_packet_stats);
+exit1:
+	return result;
+#endif
 }
 
 /*
@@ -4773,9 +5254,10 @@ static void __exit sfe_ipv6_exit(void)
 	remove_proc_entry("ipv6_iface_name",NULL);
 
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_dev_attr.attr);
+#ifdef CONFIG_DEBUG_FS
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level.attr);
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level_low.attr);
-
+#endif
 	kobject_put(si->sys_sfe_ipv6);
 	if (ipc_sfe_log_ctxt != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt);
@@ -4783,8 +5265,10 @@ static void __exit sfe_ipv6_exit(void)
 	if (ipc_sfe_log_ctxt_low != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
 
+#ifdef CONFIG_DEBUG_FS
 	if (sfe_ipv6_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv6_dent);
+#endif
 
 }
 
