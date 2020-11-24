@@ -315,9 +315,13 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr,
 
 		dst = (struct dst_entry *)rt;
 	} else {
+#ifdef ISKERNEL5_4
 		rt6 = rt6_lookup(&init_net,
 				(struct in6_addr *)addr->ip6,
 				0, 0, 0, 0);
+#else
+		rt6 = rt6_lookup(&init_net, (struct in6_addr *)addr->ip6, 0, 0, 0);
+#endif
 		if (!rt6) {
 			goto ret_fail;
 		}
