@@ -1214,6 +1214,8 @@ static int __init sfe_cm_init(void)
 	sc->inet6_notifier.notifier_call = sfe_cm_inet6_event;
 	sc->inet6_notifier.priority = 1;
 	register_inet6addr_notifier(&sc->inet6_notifier);
+
+	spin_lock_init(&sc->lock);
 	/*
 	 * Register our netfilter hooks.
 	 */
@@ -1239,7 +1241,6 @@ static int __init sfe_cm_init(void)
 		goto exit3;
 	}
 #endif
-	spin_lock_init(&sc->lock);
 
 	/*
 	 * Hook the receive path in the network stack.
