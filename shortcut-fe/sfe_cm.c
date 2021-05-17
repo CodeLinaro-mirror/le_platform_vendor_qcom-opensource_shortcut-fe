@@ -711,13 +711,17 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	sic.dest_mtu = dest_dev_use->mtu;
 
 	if (likely(is_v4)) {
-		if (sfe_ipv4_create_rule(&sic) == 0) {
+		if (sfe_ipv4_cmp_iface_name(sic.src_dev->name, sic.dest_dev->name) == 0) {
+			if (sfe_ipv4_create_rule(&sic) == 0) {
 				ct->sfe_entry = (void *)(&sic);
 			}
-	} else {
-		if (sfe_ipv6_create_rule(&sic) == 0) {
+		}
+	}else {
+		if(sfe_ipv6_cmp_iface_name(sic.src_dev->name, sic.dest_dev->name) == 0) {
+			if (sfe_ipv6_create_rule(&sic) == 0) {
 				ct->sfe_entry = (void *)(&sic);
 			}
+		}
 	}
 
 	/*

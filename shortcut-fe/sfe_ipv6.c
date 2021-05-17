@@ -4503,6 +4503,24 @@ static ssize_t write_to_v6_iface_proc_entry(struct file *file,const char *buf,si
 	return count;
 }
 
+int sfe_ipv6_cmp_iface_name(const char *src_dev_iface, const char *dest_dev_iface)
+{
+	struct sfe_ipv6 *si = &__si6;
+
+	if((si == NULL) || (si->iface_length == 0) || (si->iface_length > MAX_INTF_LEN)) {
+		return 0;
+	}
+
+	if((strncmp(src_dev_iface, si->ipv6_iface, si->iface_length) == 0) || (strncmp(dest_dev_iface, si->ipv6_iface, si->iface_length) == 0)) {
+		DEBUG_INFO("Iface_name matched \n");
+		return 0;
+	}
+	else
+	{
+		return -EINVAL;
+	}
+}
+
 
 static struct file_operations ipv6_iface_proc_fops = {
 	.owner = THIS_MODULE,
@@ -4740,6 +4758,7 @@ module_exit(sfe_ipv6_exit)
 	EXPORT_SYMBOL(sfe_ipv6_register_sync_rule_callback);
 	EXPORT_SYMBOL(sfe_ipv6_mark_rule);
 	EXPORT_SYMBOL(sfe_ipv6_update_rule);
+	EXPORT_SYMBOL(sfe_ipv6_cmp_iface_name);
 #ifdef CONFIG_NF_FLOW_COOKIE
 	EXPORT_SYMBOL(sfe_ipv6_register_flow_cookie_cb);
 	EXPORT_SYMBOL(sfe_ipv6_unregister_flow_cookie_cb);
