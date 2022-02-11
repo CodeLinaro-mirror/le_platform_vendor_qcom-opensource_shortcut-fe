@@ -3,6 +3,8 @@
  *	Shortcut forwarding engine - IPv6 support.
  *
  * Copyright (c) 2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -39,9 +41,6 @@
 #define PACKETS_STATS_ENABLED 0
 #ifdef FEATURE_L2TP_OVER_SFE
 #define IPPROTO_L2TP 115
-#define L2TP_TUNNEL_SIZE 4
-#define CISCO_HDLC_SIZE 4
-#define INNER_HDR_SIZE 14
 #endif
 #define SFE_DEBUGFS_V6_RW_PERM 0664
 #define SFE_DEBUGFS_V6_READ_LEN 3000
@@ -2151,12 +2150,31 @@ static void sfe_ipv6_flush_connection(struct sfe_ipv6 *si, struct sfe_ipv6_conne
 	kfree(c);
 }
 
+#ifdef FEATURE_L2TP_OVER_SFE
+/* start: Changes SFE L2TP UDP*/
+/* common api to add l2tp entry to hash array*/
+static inline struct sfe_l2tp_config *find_l2tp_entry_in_sfe_l2tp_arr(uint32_t session_id)
+{
+	int i=0;
+	for (i=0;i<SFE_L2TP_MAX_CONF;i++)
+	{
+		if ((sfe_l2tp_session_arr.session[i].session_id) == session_id) {
+			return &sfe_l2tp_session_arr.session[i];
+		}
+	}
+	DEBUG_TRACE_LOW("L2TP Session not found %lu",session_id);
+	return NULL;
+}
+#endif
+
 /*
  * sfe_ipv6_recv_udp()
  *	Handle UDP packet receives and forwarding.
  */
 static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct net_device *dev,
-		unsigned int len, struct sfe_ipv6_ip_hdr *iph, unsigned int ihl, bool flush_on_find)
+		unsigned int len, struct sfe_ipv6_ip_hdr *iph, unsigned int ihl,
+		bool flush_on_find, struct packet_type *pt_prev)
+
 {
 	struct sfe_ipv6_udp_hdr *udph;
 	struct sfe_ipv6_addr *src_ip;
@@ -2171,6 +2189,12 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	unsigned int skb_trim_len, trim_len = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
+#ifdef FEATURE_L2TP_OVER_SFE
+	struct sfe_l2tp_config *conn;
+	struct sfe_l2tp_udp_hdr *l2tp_hdr;
+	int session_idx = -1;
+	struct net_device *dest_br_dev = NULL;
+#endif
 
 	/*
 	 * Is our packet too short to contain a valid UDP header?
@@ -2185,6 +2209,18 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 		return 0;
 	}
 
+#ifdef FEATURE_L2TP_OVER_SFE
+	/* start: changes for L2TP_over_SFE*/
+	/* extract L2TP header to read session id and find connection in SFE l2tp HT*/
+	l2tp_hdr = (struct sfe_l2tp_udp_hdr *)(skb->data + ihl + UDP_HDR_SIZE);
+
+	conn = find_l2tp_entry_in_sfe_l2tp_arr((uint32_t)ntohl(l2tp_hdr->session_id));
+
+	if(conn != NULL ) {
+		return sfe_l2tp_ipv6_udp_recv(conn,skb, ihl, pt_prev);
+	}
+#endif
+
 	/*
 	 * Read the IP address and port information.  Read the IP header data first
 	 * because we've almost certainly got that in the cache.  We may not yet have
@@ -2196,6 +2232,11 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	udph = (struct sfe_ipv6_udp_hdr *)(skb->data + ihl);
 	src_port = udph->source;
 	dest_port = udph->dest;
+#ifdef FEATURE_L2TP_OVER_SFE
+	DEBUG_INFO("UDP src_port:%lu dest_port:%lu ihl:%lu flags_and_ver:%lu reserved:%lu",
+		ntohs(src_port), ntohs(dest_port), ihl,
+		ntohs(l2tp_hdr->flags_and_ver), ntohs(l2tp_hdr->reserved));
+#endif
 
 	spin_lock_bh(&si->lock);
 
@@ -2358,6 +2399,15 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	xmit_dev = cm->xmit_dev;
 	skb->dev = xmit_dev;
 	c = cm->connection;
+
+#ifdef FEATURE_L2TP_OVER_SFE
+	DEBUG_TRACE_LOW("Checking for a session match for DL transfer");
+
+	session_idx = find_l2tp_dev_in_sfe_l2tp_arr(cm->xmit_dev->name, strlen(cm->xmit_dev->name));
+
+	DEBUG_TRACE_LOW("Session index stored: %d", session_idx);
+#endif
+
 	/*
 	 * Check to see if we need to write a header.
 	 */
@@ -2407,9 +2457,43 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
 				trim_len = ETH_HLEN;
+#ifdef FEATURE_L2TP_OVER_SFE
+				if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+					dest_br_dev = sfe_dev_get_bridge(cm->xmit_dev);
+					if (!dest_br_dev) {
+						DEBUG_TRACE_LOW("no bridge found for: %s\n",
+							cm->xmit_dev->name);
+					}
+					else{
+						DEBUG_TRACE_LOW("bridge found for: %s = %s\n",
+							cm->xmit_dev->name, dest_br_dev->name);
+						memcpy(&eth->h_source[0], dest_br_dev->dev_addr,
+							sizeof(dest_br_dev->dev_addr));
+					}
+				}
+#endif
 			}
 		}
 	}
+
+#ifdef FEATURE_L2TP_OVER_SFE
+		/*strcmp with xmit_dev and sfe_l2tp_config->l2tp_iface and find match */
+
+		DEBUG_TRACE_LOW("IPV6 cm->xmit_dev:%s cm->match->dev:%s",
+			cm->xmit_dev->name,cm->match_dev->name);
+
+		if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+			trim_len = 0;
+			if(build_l2tp_over_udp_hdr(skb, len, session_idx)!=0){
+				DEBUG_TRACE_LOW("Header insertion complete");
+			}
+			else{
+				DEBUG_TRACE_LOW("Header insertion failure");
+				return 0;
+		}
+	}
+
+#endif
 
 #ifdef SFE_CONFIG_MARK
 	/*
@@ -2546,6 +2630,10 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	struct sfe_ipv6_connection *c;
 	uint32_t data_offs;
 	unsigned int trim_len = 0;
+#ifdef FEATURE_L2TP_OVER_SFE
+	int session_idx = -1;
+	struct net_device *dest_br_dev = NULL;
+#endif
 
 	/*
 	 * Is our packet too short to contain a valid UDP header?
@@ -2924,6 +3012,15 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	xmit_dev = cm->xmit_dev;
 	skb->dev = xmit_dev;
 	c = cm->connection;
+
+#ifdef FEATURE_L2TP_OVER_SFE
+	DEBUG_TRACE_LOW("Checking for a session match for DL transfer");
+
+	session_idx = find_l2tp_dev_in_sfe_l2tp_arr(cm->xmit_dev->name, strlen(cm->xmit_dev->name));
+
+	DEBUG_TRACE_LOW("Session index stored: %d", session_idx);
+#endif
+
 	/*
 	 * Check to see if we need to write a header.
 	 */
@@ -2973,9 +3070,42 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
 				trim_len = ETH_HLEN;
+#ifdef FEATURE_L2TP_OVER_SFE
+				if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+					dest_br_dev = sfe_dev_get_bridge(cm->xmit_dev);
+					if (!dest_br_dev) {
+						DEBUG_TRACE_LOW("no bridge found for: %s\n",
+							cm->xmit_dev->name);
+					}
+					else{
+						DEBUG_TRACE_LOW("bridge found for: %s = %s\n",
+							cm->xmit_dev->name, dest_br_dev->name);
+						memcpy(&eth->h_source[0], dest_br_dev->dev_addr,
+							sizeof(dest_br_dev->dev_addr));
+					}
+				}
+#endif
 			}
 		}
 	}
+
+#ifdef FEATURE_L2TP_OVER_SFE
+	/*strcmp with xmit_dev and sfe_l2tp_config->l2tp_iface and find match */
+
+	DEBUG_TRACE_LOW("IPV6 cm->xmit_dev:%s cm->match->dev:%s",
+		cm->xmit_dev->name,cm->match_dev->name);
+
+	if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+		trim_len = 0;
+		if(build_l2tp_over_udp_hdr(skb, len, session_idx)!=0){
+			DEBUG_TRACE_LOW("Header insertion complete");
+			}
+		else{
+			DEBUG_TRACE_LOW("Header insertion failure");
+			return 0;
+		}
+	}
+#endif
 
 #ifdef SFE_CONFIG_MARK
 	/*
@@ -3206,6 +3336,8 @@ static int sfe_ipv6_recv_icmp(struct sfe_ipv6 *si, struct sk_buff *skb, struct n
 }
 
 #ifdef FEATURE_L2TP_OVER_SFE
+
+/* Function for processing L2TP packets over IPV6 */
 int sfe_l2tp_ipv6_recv(
 	struct sk_buff *skb,
 	unsigned int ihl,
@@ -3244,7 +3376,7 @@ int sfe_l2tp_ipv6_recv(
 	__skb_pull(skb, ihl +
 		L2TP_TUNNEL_SIZE +
 		CISCO_HDLC_SIZE +
-		INNER_HDR_SIZE);
+		INNER_L2TP_ETH_HDR_SIZE);
 
 	dev_put(dev);
 	ret = sfe_ipv4_recv(skb->dev, skb, pt_prev);
@@ -3259,6 +3391,80 @@ int sfe_l2tp_ipv6_recv(
 
 		else {
 		__skb_push(skb, ihl+22);
+			return ret;
+		}
+	}
+
+	return 0;
+
+}
+
+/* Function for processing L2TP packets over IPV6 and UDP */
+int sfe_l2tp_ipv6_udp_recv(
+	struct sfe_l2tp_config *conn,
+	struct sk_buff *skb,
+	unsigned int ihl,
+	struct packet_type *pt_prev)
+{
+	/* TBD: should we check for net*/
+	struct net *net = dev_net(skb->dev);
+	u32 session_id;
+	struct net_device *dev;
+	unsigned char *optr;
+	int ret = 0;
+	struct sfe_l2tp_udp_hdr *l2tp_hdr;
+
+	/* TBD: change dev from skb->dev to parent dev??*/
+	/* dev = skb->dev; */
+	dev = skb->dev;
+
+	if (net == NULL)
+		return 0;
+
+	if (skb_vlan_tag_present(skb))
+		return 0;
+
+	if (dev == NULL)
+		return 0;
+
+	optr = (skb->data);
+
+
+	/*change the checksum value to NONE, as per L2TP*/
+	skb->ip_summed = CHECKSUM_NONE;
+
+	/* start: changes for SFE L2TP
+	 * Pulling following till innner ethernet header.
+	 * Header length
+	 * L2TP tunnel size
+	 * UDP header
+	 * Inner header length
+	 */
+
+	__skb_pull(skb, ihl +
+		L2TP_TUNNEL_SIZE +
+		COOKIE_SIZE +
+		UDP_HDR_SIZE  +
+		INNER_L2TP_ETH_HDR_SIZE);
+
+	dev_put(dev);
+	ret = sfe_ipv4_recv(skb->dev, skb, pt_prev);
+
+	if (ret != 0)
+		return ret;
+
+	else {
+		ret = sfe_ipv6_recv(skb->dev, skb, pt_prev);
+		if (ret != 0)
+			return ret;
+
+		else {
+			/*__skb_push(skb, ihl+22);*/
+			__skb_push
+			(
+				skb,
+				ihl+L2TP_TUNNEL_SIZE+UDP_HDR_SIZE+INNER_L2TP_ETH_HDR_SIZE+COOKIE_SIZE
+			);
 			return ret;
 		}
 	}
@@ -3382,7 +3588,7 @@ int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 	}
 
 	if (IPPROTO_UDP == next_hdr) {
-		return sfe_ipv6_recv_udp(si, skb, dev, len, iph, ihl, flush_on_find);
+		return sfe_ipv6_recv_udp(si, skb, dev, len, iph, ihl, flush_on_find, pt_prev);
 	}
 
 	if (IPPROTO_ICMPV6 == next_hdr) {
@@ -3591,7 +3797,7 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	if (sic->l2tp_traffic) {
 		DEBUG_TRACE_LOW("l2tp_traffic is enabled\n");
 		sfe_l2tp_find_parent_dev(sic->src_dev->name,
-				sic->sfe_config_hash, &(sic->parent_dev));
+				&sic->sfe_config_array, &(sic->parent_dev));
 		if (sic->parent_dev != NULL) {
 			parent_dev = sic->parent_dev;
 			original_cm->l2tp_traffic = true;

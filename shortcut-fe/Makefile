@@ -18,6 +18,8 @@ KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 DEBUG_CFLAGS = -g
 KVER = $(KERNEL_VERSION)
 
+ccflags-y += -DFEATURE_L2TP_OVER_SFE
+
 ifeq ($(KVER),$(filter 4.9%,$(KVER)))
 ccflags-y += -DISKERNELUPGRADED
 endif
