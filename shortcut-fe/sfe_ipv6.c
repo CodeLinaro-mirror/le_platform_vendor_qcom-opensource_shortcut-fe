@@ -2,7 +2,7 @@
  * sfe_ipv6.c
  *	Shortcut forwarding engine - IPv6 support.
  *
- * Copyright (c) 2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015, 2022 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -777,9 +777,9 @@ static void sfe_ipv6_destroy_packet_stats_list(void)
 {
 	struct sfe_ipv6 *si = &__si6;
 
-	struct sfe_ipv6_packet_stats_list* curr;
-	struct hlist_node *tmp;
-	int bkt;
+	struct sfe_ipv6_packet_stats_list* curr=NULL;
+	struct hlist_node *tmp=NULL;
+	int bkt=0;
 
 	hash_for_each_safe(si->packet_stats_htable, bkt, tmp, curr, sfe_ipv6_packet_hash_list) {
 		DEBUG_INFO("deleting node %pI6 , conn %d\n",
@@ -807,7 +807,7 @@ static u32 ht_conn_hash(unsigned long *saddr)
 static void sfe_ipv6_remove_packet_stats_connection(struct sfe_ipv6_addr * client_addr)
 {
 	struct sfe_ipv6 *si = &__si6;
-	struct sfe_ipv6_packet_stats_list* curr;
+	struct sfe_ipv6_packet_stats_list* curr=NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
@@ -840,7 +840,7 @@ static void sfe_ipv6_remove_packet_stats_connection(struct sfe_ipv6_addr * clien
 
 static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct sfe_ipv6_packet_stats_list* node)
 {
-	struct sfe_ipv6_packet_stats_list* curr;
+	struct sfe_ipv6_packet_stats_list* curr=NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
@@ -871,7 +871,7 @@ static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct 
 
 static bool sfe_ipv6_update_packet_stats_connection(struct sfe_ipv6* sic,struct sfe_ipv6_addr * client_addr, uint64_t rx_bytes, uint64_t tx_bytes )
 {
-	struct sfe_ipv6_packet_stats_list* curr;
+	struct sfe_ipv6_packet_stats_list* curr=NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
@@ -904,9 +904,9 @@ static bool sfe_ipv6_update_packet_stats_connection(struct sfe_ipv6* sic,struct 
 
 static void sfe_ipv6_reset_packet_stats_counters(struct sfe_ipv6* sic)
 {
-	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
+	struct sfe_ipv6_packet_stats_list* curr=NULL;
+	int bkt=0;
+	struct hlist_node *tmp=NULL;
 
 	hash_for_each_safe(sic->packet_stats_htable, bkt, tmp, curr, sfe_ipv6_packet_hash_list) {
 		DEBUG_INFO("reseting counters for client %pI6 \n", &curr->packet_stats_node.client_src_addr[0]);
@@ -1164,9 +1164,9 @@ exit1:
 static bool sfe_ipv6_packet_stats_display_connections_connection(struct sfe_ipv6 *si, char *buffer, char *msg, size_t *length,
 		int *total_read, struct sfe_ipv6_packet_stats_xml_write_state *ws)
 {
-	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
+	struct sfe_ipv6_packet_stats_list* curr=NULL;
+	int bkt=0;
+	struct hlist_node *tmp=NULL;
 	uint32_t bytes_read;
 	int valid_conn = 0;
 

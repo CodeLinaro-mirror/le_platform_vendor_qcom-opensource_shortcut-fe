@@ -2,7 +2,7 @@
  * sfe_ipv4.c
  *	Shortcut forwarding engine - IPv4 edition.
  *
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015, 2022 The Linux Foundation. All rights reserved.
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -636,9 +636,9 @@ __ATTR(packet_stats_dev, 0664, sfe_ipv4_get_packet_stats_dev, NULL);
 static void sfe_ipv4_destroy_packet_stats_list(void)
 {
 	struct sfe_ipv4 *si = &__si;
-	struct sfe_ipv4_packet_stats_list* curr;
-	struct hlist_node *tmp;
-	int bkt;
+	struct sfe_ipv4_packet_stats_list* curr=NULL;
+	struct hlist_node *tmp=NULL;
+	int bkt=0;
 
 	hash_for_each_safe(si->packet_stats_htable, bkt, tmp, curr, sfe_ipv4_packet_hash_list) {
 		hash_del(&curr->sfe_ipv4_packet_hash_list);
@@ -699,7 +699,7 @@ static void sfe_ipv4_remove_packet_stats_connection(__be32 client_addr)
 
 static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct sfe_ipv4_packet_stats_list* node)
 {
-	struct sfe_ipv4_packet_stats_list* curr;
+	struct sfe_ipv4_packet_stats_list* curr=NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
@@ -726,7 +726,7 @@ static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct 
 
 static bool sfe_ipv4_update_packet_stats_connection(struct sfe_ipv4 *sic,__be32 client_addr, uint64_t rx_bytes, uint64_t tx_bytes )
 {
-	struct sfe_ipv4_packet_stats_list* curr;
+	struct sfe_ipv4_packet_stats_list* curr=NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
@@ -754,9 +754,9 @@ static bool sfe_ipv4_update_packet_stats_connection(struct sfe_ipv4 *sic,__be32 
 
 static void sfe_ipv4_reset_packet_stats_counters(struct sfe_ipv4* sic)
 {
-	struct sfe_ipv4_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
+	struct sfe_ipv4_packet_stats_list* curr=NULL;
+	int bkt=0;
+	struct hlist_node *tmp=NULL;
 	spin_lock_bh(&sic->lock);
 
 	//loop through hash table
@@ -1039,10 +1039,10 @@ static bool sfe_ipv4_packet_stats_display_connections_connection(struct sfe_ipv4
 {
 	uint32_t bytes_read;
 
-	struct sfe_ipv4_packet_stats_list* curr;
-	int bkt;
+	struct sfe_ipv4_packet_stats_list* curr=NULL;
+	int bkt=0;
 	int valid_conn = 0;
-	struct hlist_node *tmp;
+	struct hlist_node *tmp=NULL;
 
 	spin_lock_bh(&si->lock);
 
