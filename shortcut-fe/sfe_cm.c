@@ -3,6 +3,8 @@
  *	Shortcut forwarding engine connection manager.
  *
  * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -38,6 +40,7 @@
 
 #ifdef FEATURE_L2TP_OVER_SFE
 #define NL_UNICAST_GRP 0
+static bool l2tp_traffic;
 #endif
 
 typedef enum sfe_cm_exception {
@@ -740,9 +743,9 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 
 	if (l2tp_traffic) {
 		memcpy(
-			sic.sfe_config_hash,
-			sfe_l2tp_ht,
-			sizeof(sic.sfe_config_hash));
+			&sic.sfe_config_array,
+			&sfe_l2tp_session_arr,
+			sizeof(sic.sfe_config_array));
 		sic.l2tp_traffic = l2tp_traffic;
 		sic.parent_dev = NULL;
 	}
@@ -1111,26 +1114,93 @@ static ssize_t sfe_cm_get_exceptions(struct device *dev,
 /* common api to add l2tp entry to hash array*/
 static inline void add_l2tp_entry_to_ht(struct sfe_l2tp_config *conf)
 {
-	sfe_l2tp_ht[conf->session_id].command = conf->command;
-
-	if (conf->session_id < 0 || conf->session_id >= SFE_L2TP_MAX_CONF) {
-		DEBUG_INFO("session_id out of range\n");
+	int i=0;
+	if (sfe_l2tp_session_arr.num_sessions ==  SFE_L2TP_MAX_CONF) {
+		DEBUG_INFO("Exceeded number of L2TP UDP sessions \n");
 		return;
 	}
-	sfe_l2tp_ht[conf->session_id].session_id = conf->session_id;
 
-	strlcpy(
-		sfe_l2tp_ht[conf->session_id].l2tp_iface,
-		conf->l2tp_iface,
-		MAX_IFACE_NAME_SIZE);
-	strlcpy(
-		sfe_l2tp_ht[conf->session_id].parent_iface,
-		conf->parent_iface, MAX_IFACE_NAME_SIZE);
+	/* check for duplicates*/
+	for (i=0;i<SFE_L2TP_MAX_CONF;i++) {
+		if (sfe_l2tp_session_arr.session[i].local_tunnel_id == conf->local_tunnel_id &&
+			sfe_l2tp_session_arr.session[i].session_id == conf->session_id &&
+			sfe_l2tp_session_arr.session[i].peer_session_id == conf->peer_session_id &&
+			sfe_l2tp_session_arr.session[i].src_port == conf->src_port &&
+			sfe_l2tp_session_arr.session[i].dest_port == conf->dest_port){
+			DEBUG_INFO("Duplicate tunnel/session. Bail \n");
+		return;
+	}
+	}
 
-	DEBUG_INFO(
-		"values of L2TP config l2tp_intf = %s, parent = %s\n",
-		sfe_l2tp_ht[conf->session_id].l2tp_iface,
-		sfe_l2tp_ht[conf->session_id].parent_iface);
+	/* find a free entry and add a session */
+	for (i=0;i<SFE_L2TP_MAX_CONF;i++) {
+		if (sfe_l2tp_session_arr.session[i].local_tunnel_id == 0 &&
+			sfe_l2tp_session_arr.session[i].session_id == 0 &&
+			sfe_l2tp_session_arr.session[i].peer_session_id == 0 &&
+			sfe_l2tp_session_arr.session[i].src_port == 0 &&
+			sfe_l2tp_session_arr.session[i].dest_port == 0)
+		{
+			sfe_l2tp_session_arr.session[i].command = conf->command;
+			sfe_l2tp_session_arr.session[i].local_tunnel_id = conf->local_tunnel_id;
+			sfe_l2tp_session_arr.session[i].session_id = conf->session_id;
+			sfe_l2tp_session_arr.session[i].peer_session_id = conf->peer_session_id;
+
+			strlcpy(
+				sfe_l2tp_session_arr.session[i].l2tp_iface,
+				conf->l2tp_iface,
+				MAX_IFACE_NAME_SIZE);
+			strlcpy(
+				sfe_l2tp_session_arr.session[i].parent_iface,
+				conf->parent_iface, MAX_IFACE_NAME_SIZE);
+
+			DEBUG_INFO(
+				"values of L2TP config l2tp_intf = %s, parent = %s\n, session_id=%u, peer_session_id:%u",
+				sfe_l2tp_session_arr.session[i].l2tp_iface,
+				sfe_l2tp_session_arr.session[i].parent_iface,
+				sfe_l2tp_session_arr.session[i].session_id,
+				sfe_l2tp_session_arr.session[i].peer_session_id);
+
+			memcpy(
+				sfe_l2tp_session_arr.session[i].src_addr,
+				conf->src_addr,
+				sizeof(sfe_l2tp_session_arr.session[i].src_addr));
+			memcpy(
+				sfe_l2tp_session_arr.session[i].dest_addr,
+				conf->dest_addr,
+				sizeof(sfe_l2tp_session_arr.session[i].dest_addr));
+
+			sfe_l2tp_session_arr.session[i].src_port = conf->src_port;
+			sfe_l2tp_session_arr.session[i].dest_port = conf->dest_port;
+
+			memcpy(
+				sfe_l2tp_session_arr.session[i].mac_addr_src,
+				conf->mac_addr_src,
+				sizeof(sfe_l2tp_session_arr.session[i].mac_addr_src));
+			memcpy(
+				sfe_l2tp_session_arr.session[i].mac_addr_dest,
+				conf->mac_addr_dest,
+				sizeof(sfe_l2tp_session_arr.session[i].mac_addr_dest));
+
+			DEBUG_INFO("SRC mac:%x:%x:%x:%x:%x:%x	DEST mac:%x:%x:%x:%x:%x:%x srcport:%d destport: %d",
+				sfe_l2tp_session_arr.session[i].mac_addr_src[0],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[1],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[2],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[3],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[4],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[5],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[0],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[1],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[2],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[3],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[4],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[5],
+				sfe_l2tp_session_arr.session[i].src_port,
+				sfe_l2tp_session_arr.session[i].dest_port);
+
+			sfe_l2tp_session_arr.num_sessions++;
+			break;
+		}
+	}
 }
 
 
@@ -1138,6 +1208,8 @@ static void sfe_l2tp_nl_receive(struct sk_buff *skb)
 {
 	struct nlmsghdr *nlheader;
 	struct sfe_l2tp_config *nl_l2tp_ptr = NULL;
+	int i=0;
+	DEBUG_ERROR("NL received\n");
 
 	nl_l2tp_ptr = kmalloc(sizeof(struct sfe_l2tp_config), GFP_KERNEL);
 
@@ -1151,32 +1223,49 @@ static void sfe_l2tp_nl_receive(struct sk_buff *skb)
 			nlmsg_data(nlheader), sizeof(struct sfe_l2tp_config));
 	gPID = nlheader->nlmsg_pid;
 
-	if (sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id < 0 ||
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id >=
-			SFE_L2TP_MAX_CONF) {
-		DEBUG_INFO("session_id out of range\n");
-		goto Free_nl_l2tp_ptr;
-	}
+	DEBUG_ERROR("NL received: command: %d\n", nl_l2tp_ptr->command);
 
 	if (nl_l2tp_ptr->command == SFE_PASS_L2TP_CONFIG_TO_SFE) {
 		l2tp_traffic = true;
 		add_l2tp_entry_to_ht(nl_l2tp_ptr);
 	} else if (nl_l2tp_ptr->command == SFE_DEL_L2TP_CONFIG_FROM_SFE) {
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].command = 0;
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].local_tunnel_id = 0;
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id = 0;
-		memset(
-			sfe_l2tp_ht[nl_l2tp_ptr->session_id].parent_iface,
-			0,
-			MAX_IFACE_NAME_SIZE);
-		memset(
-			sfe_l2tp_ht[nl_l2tp_ptr->session_id].l2tp_iface,
-			0,
-			MAX_IFACE_NAME_SIZE);
+		for (i=0;i<SFE_L2TP_MAX_CONF;i++) {
+			if (sfe_l2tp_session_arr.session[i].local_tunnel_id == nl_l2tp_ptr->local_tunnel_id &&
+				sfe_l2tp_session_arr.session[i].session_id == nl_l2tp_ptr->session_id &&
+				sfe_l2tp_session_arr.session[i].peer_session_id == nl_l2tp_ptr->peer_session_id &&
+				sfe_l2tp_session_arr.session[i].src_port == nl_l2tp_ptr->src_port &&
+				sfe_l2tp_session_arr.session[i].dest_port == nl_l2tp_ptr->dest_port)
+			{
+				sfe_l2tp_session_arr.session[i].command = 0;
+				sfe_l2tp_session_arr.session[i].local_tunnel_id = 0;
+				sfe_l2tp_session_arr.session[i].session_id = 0;
+				sfe_l2tp_session_arr.session[i].peer_session_id = 0;
+				memset(sfe_l2tp_session_arr.session[i].parent_iface,
+					0, MAX_IFACE_NAME_SIZE);
+				memset(sfe_l2tp_session_arr.session[i].l2tp_iface,
+					0, MAX_IFACE_NAME_SIZE);
+				memset(sfe_l2tp_session_arr.session[i].src_addr,
+					0, sizeof(sfe_l2tp_session_arr.session[i].src_addr));
+				memset(sfe_l2tp_session_arr.session[i].dest_addr,
+					0, sizeof(sfe_l2tp_session_arr.session[i].dest_addr));
+				sfe_l2tp_session_arr.session[i].src_port = 0;
+				sfe_l2tp_session_arr.session[i].dest_port = 0;
+				memset(sfe_l2tp_session_arr.session[i].mac_addr_src,
+					0, sizeof(sfe_l2tp_session_arr.session[i].mac_addr_src));
+				memset(sfe_l2tp_session_arr.session[i].mac_addr_dest,
+					0, sizeof(sfe_l2tp_session_arr.session[i].mac_addr_dest));
+				/* decrease session */
+				if (sfe_l2tp_session_arr.num_sessions > 0) {
+					sfe_l2tp_session_arr.num_sessions--;
+				}
+			}
 	}
-Free_nl_l2tp_ptr:
+		
+	}
+/*Free_nl_l2tp_ptr:*/
 	kfree(nl_l2tp_ptr);
 }
+
 #endif
 
 /*
@@ -1252,6 +1341,7 @@ static int __init sfe_cm_init(void)
 		DEBUG_ERROR("Error creating SFE L2TP NL socket");
 		goto exit3;
 	}
+	DEBUG_ERROR("created SFE L2TP NL socket");
 #endif
 
 	/*
