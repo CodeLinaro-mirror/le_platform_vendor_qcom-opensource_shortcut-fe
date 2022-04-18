@@ -388,7 +388,7 @@ ret_fail:
  */
 static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 {
-	struct sfe_connection_create sic;
+	struct sfe_connection_create *sic;
 	struct net_device *in;
 	struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
@@ -520,69 +520,75 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * Note that the data we get from conntrack is for the "ORIGINAL" direction
 	 * but our packet may actually be in the "REPLY" direction.
 	 */
+	sic = (struct sfe_connection_create *)kmalloc(sizeof(struct sfe_connection_create), GFP_KERNEL);
+	if (sic == NULL)
+	{
+		DEBUG_TRACE("Cannot allocate memory for sic\n");
+		return NF_ACCEPT;
+	}
 	orig_tuple = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
 	reply_tuple = ct->tuplehash[IP_CT_DIR_REPLY].tuple;
-	sic.protocol = (int32_t)orig_tuple.dst.protonum;
+	sic->protocol = (int32_t)orig_tuple.dst.protonum;
 	/*
 	 * Get addressing information, non-NAT first
 	 */
 	if (likely(is_v4)) {
-		sic.src_ip.ip = (__be32)orig_tuple.src.u3.ip;
-		sic.dest_ip.ip = (__be32)orig_tuple.dst.u3.ip;
+		sic->src_ip.ip = (__be32)orig_tuple.src.u3.ip;
+		sic->dest_ip.ip = (__be32)orig_tuple.dst.u3.ip;
 
-		if (ipv4_is_multicast(sic.src_ip.ip) || ipv4_is_multicast(sic.dest_ip.ip)) {
+		if (ipv4_is_multicast(sic->src_ip.ip) || ipv4_is_multicast(sic->dest_ip.ip)) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_IS_IPV4_MCAST);
 			DEBUG_TRACE("multicast address\n");
-			return NF_ACCEPT;
+			goto done4;
 		}
 
 		/*
 		 * NAT'ed addresses - note these are as seen from the 'reply' direction
 		 * When NAT does not apply to this connection these will be identical to the above.
 		 */
-		sic.src_ip_xlate.ip = (__be32)reply_tuple.dst.u3.ip;
-		sic.dest_ip_xlate.ip = (__be32)reply_tuple.src.u3.ip;
+		sic->src_ip_xlate.ip = (__be32)reply_tuple.dst.u3.ip;
+		sic->dest_ip_xlate.ip = (__be32)reply_tuple.src.u3.ip;
 	} else {
-		sic.src_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.src.u3.in6);
-		sic.dest_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.dst.u3.in6);
+		sic->src_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.src.u3.in6);
+		sic->dest_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.dst.u3.in6);
 
-		if (ipv6_addr_is_multicast((struct in6_addr *)sic.src_ip.ip6) ||
-		    ipv6_addr_is_multicast((struct in6_addr *)sic.dest_ip.ip6)) {
+		if (ipv6_addr_is_multicast((struct in6_addr *)sic->src_ip.ip6) ||
+		    ipv6_addr_is_multicast((struct in6_addr *)sic->dest_ip.ip6)) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_IS_IPV6_MCAST);
 			DEBUG_TRACE("multicast address\n");
-			return NF_ACCEPT;
+			goto done4;
 		}
 
 		/*
 		 * NAT'ed addresses - note these are as seen from the 'reply' direction
 		 * When NAT does not apply to this connection these will be identical to the above.
 		 */
-		sic.src_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.dst.u3.in6);
-		sic.dest_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.src.u3.in6);
+		sic->src_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.dst.u3.in6);
+		sic->dest_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.src.u3.in6);
 	}
 
-	sic.flags = 0;
-	sic.mark = skb->mark;
+	sic->flags = 0;
+	sic->mark = skb->mark;
 
-	switch (sic.protocol) {
+	switch (sic->protocol) {
 	case IPPROTO_TCP:
-		sic.src_port = orig_tuple.src.u.tcp.port;
-		sic.dest_port = orig_tuple.dst.u.tcp.port;
-		sic.src_port_xlate = reply_tuple.dst.u.tcp.port;
-		sic.dest_port_xlate = reply_tuple.src.u.tcp.port;
-		sic.src_td_window_scale = ct->proto.tcp.seen[0].td_scale;
-		sic.src_td_max_window = ct->proto.tcp.seen[0].td_maxwin;
-		sic.src_td_end = ct->proto.tcp.seen[0].td_end;
-		sic.src_td_max_end = ct->proto.tcp.seen[0].td_maxend;
-		sic.dest_td_window_scale = ct->proto.tcp.seen[1].td_scale;
-		sic.dest_td_max_window = ct->proto.tcp.seen[1].td_maxwin;
-		sic.dest_td_end = ct->proto.tcp.seen[1].td_end;
-		sic.dest_td_max_end = ct->proto.tcp.seen[1].td_maxend;
+		sic->src_port = orig_tuple.src.u.tcp.port;
+		sic->dest_port = orig_tuple.dst.u.tcp.port;
+		sic->src_port_xlate = reply_tuple.dst.u.tcp.port;
+		sic->dest_port_xlate = reply_tuple.src.u.tcp.port;
+		sic->src_td_window_scale = ct->proto.tcp.seen[0].td_scale;
+		sic->src_td_max_window = ct->proto.tcp.seen[0].td_maxwin;
+		sic->src_td_end = ct->proto.tcp.seen[0].td_end;
+		sic->src_td_max_end = ct->proto.tcp.seen[0].td_maxend;
+		sic->dest_td_window_scale = ct->proto.tcp.seen[1].td_scale;
+		sic->dest_td_max_window = ct->proto.tcp.seen[1].td_maxwin;
+		sic->dest_td_end = ct->proto.tcp.seen[1].td_end;
+		sic->dest_td_max_end = ct->proto.tcp.seen[1].td_maxend;
 		tcp_net = &net->ct.nf_ct_proto.tcp;
 		if (tcp_net->tcp_be_liberal
 		    || (ct->proto.tcp.seen[0].flags & IP_CT_TCP_FLAG_BE_LIBERAL)
 		    || (ct->proto.tcp.seen[1].flags & IP_CT_TCP_FLAG_BE_LIBERAL)) {
-			sic.flags |= SFE_CREATE_FLAG_NO_SEQ_CHECK;
+			sic->flags |= SFE_CREATE_FLAG_NO_SEQ_CHECK;
 		}
 
 		/*
@@ -591,7 +597,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 		if (!test_bit(IPS_ASSURED_BIT, &ct->status)) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_TCP_NOT_ASSURED);
 			DEBUG_TRACE("non-established connection\n");
-			return NF_ACCEPT;
+			goto done4;
 		}
 
 		/*
@@ -604,44 +610,44 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 			spin_unlock_bh(&ct->lock);
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_TCP_NOT_ESTABLISHED);
 			DEBUG_TRACE("connection in termination state: %#x, s: %pI4:%u, d: %pI4:%u\n",
-				    ct->proto.tcp.state, &sic.src_ip, ntohs(sic.src_port),
-				    &sic.dest_ip, ntohs(sic.dest_port));
-			return NF_ACCEPT;
+				    ct->proto.tcp.state, &sic->src_ip, ntohs(sic->src_port),
+				    &sic->dest_ip, ntohs(sic->dest_port));
+			goto done4;
 		}
 		spin_unlock_bh(&ct->lock);
 		break;
 
 	case IPPROTO_UDP:
-		sic.src_port = orig_tuple.src.u.udp.port;
-		sic.dest_port = orig_tuple.dst.u.udp.port;
-		sic.src_port_xlate = reply_tuple.dst.u.udp.port;
-		sic.dest_port_xlate = reply_tuple.src.u.udp.port;
+		sic->src_port = orig_tuple.src.u.udp.port;
+		sic->dest_port = orig_tuple.dst.u.udp.port;
+		sic->src_port_xlate = reply_tuple.dst.u.udp.port;
+		sic->dest_port_xlate = reply_tuple.src.u.udp.port;
 		break;
 
 	default:
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_UNKNOW_PROTOCOL);
-		DEBUG_TRACE("unhandled protocol %d\n", sic.protocol);
-		return NF_ACCEPT;
+		DEBUG_TRACE("unhandled protocol %d\n", sic->protocol);
+		goto done4;
 	}
 
 #ifdef CONFIG_XFRM
-	sic.original_accel = 1;
-	sic.reply_accel = 1;
+	sic->original_accel = 1;
+	sic->reply_accel = 1;
 
 	/*
 	 * For packets de-capsulated from xfrm, we still can accelerate it
 	 * on the direction we just received the packet.
 	 */
 	if (unlikely(skb->sp)) {
-		if (sic.protocol == IPPROTO_TCP &&
-			!(sic.flags & SFE_CREATE_FLAG_NO_SEQ_CHECK)) {
-			return NF_ACCEPT;
+		if (sic->protocol == IPPROTO_TCP &&
+			!(sic->flags & SFE_CREATE_FLAG_NO_SEQ_CHECK)) {
+			goto done4;
 		}
 
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
-			sic.reply_accel = 0;
+			sic->reply_accel = 0;
 		} else {
-			sic.original_accel = 0;
+			sic->original_accel = 0;
 		}
 	}
 #endif
@@ -651,32 +657,32 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * destination host addresses.
 	 */
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip, &src_dev,
-					sic.src_mac, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->src_ip, &src_dev,
+					sic->src_mac, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_DEV);
-		return NF_ACCEPT;
+		goto done4;
 	}
 
 	src_dev_use = src_dev;
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip_xlate, &dev,
-					sic.src_mac_xlate, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->src_ip_xlate, &dev,
+					sic->src_mac_xlate, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_XLATE_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip, &dev,
-					sic.dest_mac, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->dest_ip, &dev,
+					sic->dest_mac, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip_xlate, &dest_dev,
-					sic.dest_mac_xlate, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->dest_ip_xlate, &dest_dev,
+					sic->dest_mac_xlate, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_XLATE_DEV);
 		goto done1;
 	}
@@ -688,7 +694,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * the case then we need to hunt down the underlying interface.
 	 */
 	if (src_dev->priv_flags & IFF_EBRIDGE) {
-		src_br_dev = br_port_dev_get(src_dev, sic.src_mac);
+		src_br_dev = br_port_dev_get(src_dev, sic->src_mac);
 		if (!src_br_dev) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_BRIDGE);
 			DEBUG_TRACE("no port found on bridge\n");
@@ -698,7 +704,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	}
 
 	if (dest_dev->priv_flags & IFF_EBRIDGE) {
-		dest_br_dev = br_port_dev_get(dest_dev, sic.dest_mac_xlate);
+		dest_br_dev = br_port_dev_get(dest_dev, sic->dest_mac_xlate);
 		if (!dest_br_dev) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_BRIDGE);
 			DEBUG_TRACE("no port found on bridge\n");
@@ -743,27 +749,27 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 
 	if (l2tp_traffic) {
 		memcpy(
-			&sic.sfe_config_array,
+			&sic->sfe_config_array,
 			&sfe_l2tp_session_arr,
-			sizeof(sic.sfe_config_array));
-		sic.l2tp_traffic = l2tp_traffic;
-		sic.parent_dev = NULL;
+			sizeof(sic->sfe_config_array));
+		sic->l2tp_traffic = l2tp_traffic;
+		sic->parent_dev = NULL;
 	}
 #endif
 
-	sic.src_dev = src_dev_use;
-	sic.dest_dev = dest_dev_use;
+	sic->src_dev = src_dev_use;
+	sic->dest_dev = dest_dev_use;
 
-	sic.src_mtu = src_dev_use->mtu;
-	sic.dest_mtu = dest_dev_use->mtu;
+	sic->src_mtu = src_dev_use->mtu;
+	sic->dest_mtu = dest_dev_use->mtu;
 
 	if (likely(is_v4)) {
-		if (sfe_ipv4_create_rule(&sic) == 0) {
-				ct->sfe_entry = (void *)(&sic);
+		if (sfe_ipv4_create_rule(sic) == 0) {
+				ct->sfe_entry = (void *)(sic);
 			}
 	} else {
-		if (sfe_ipv6_create_rule(&sic) == 0) {
-				ct->sfe_entry = (void *)(&sic);
+		if (sfe_ipv6_create_rule(sic) == 0) {
+				ct->sfe_entry = (void *)(sic);
 			}
 	}
 
@@ -784,6 +790,9 @@ done2:
 
 done1:
 	dev_put(src_dev);
+
+done4:
+	kfree(sic);
 
 	return NF_ACCEPT;
 }
