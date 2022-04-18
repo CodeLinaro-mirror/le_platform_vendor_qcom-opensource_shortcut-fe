@@ -2328,7 +2328,7 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 						DEBUG_TRACE_LOW("bridge found for: %s = %s\n",
 							cm->xmit_dev->name, dest_br_dev->name);
 						memcpy(&eth->h_source[0], dest_br_dev->dev_addr,
-							sizeof(dest_br_dev->dev_addr));
+							ETH_ALEN);
 					}
 				}
 #endif
@@ -2964,7 +2964,7 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 						DEBUG_TRACE_LOW("bridge found for: %s = %s\n",
 							cm->xmit_dev->name, dest_br_dev->name);
 						memcpy(&eth->h_source[0], dest_br_dev->dev_addr,
-							sizeof(dest_br_dev->dev_addr));
+							ETH_ALEN);
 					}
 				}
 #endif
