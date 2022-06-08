@@ -33,6 +33,7 @@
 #include <linux/cdev.h>
 #include <uapi/linux/udp.h>
 #include <uapi/linux/if_ether.h>
+#include <net/ip6_checksum.h>
 #endif
 
 #define SFE_HOOK_ABOVE_BRIDGE 0
