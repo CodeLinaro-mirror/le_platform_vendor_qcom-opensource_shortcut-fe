@@ -342,7 +342,6 @@ static inline int build_l2tp_over_udp_hdr(struct sk_buff *skb, unsigned int len,
 	udp_hdr->source = htons(sfe_l2tp_session_arr.session[session_idx].src_port);
 	udp_hdr->dest = htons(sfe_l2tp_session_arr.session[session_idx].dest_port);
 	udp_hdr->len = htons(len + sizeof(struct sfe_l2tp_udp_hdr) + sizeof(struct udphdr) + sizeof(struct ethhdr));
-	udp_hdr->check = htons(0x0000); /*dummy check to avoid illegal csum*/
 
 	/*Insert ipv6 header*/
 	__skb_push(skb, sizeof(struct ipv6hdr));
@@ -358,6 +357,13 @@ static inline int build_l2tp_over_udp_hdr(struct sk_buff *skb, unsigned int len,
 	memcpy(ip6_hdr->daddr.s6_addr, sfe_l2tp_session_arr.session[session_idx].dest_addr,
 		sizeof(sfe_l2tp_session_arr.session[session_idx].dest_addr)); /* dest IPv6 addr */
 
+	/*Checksum calculations for UDP header*/
+	DEBUG_TRACE_LOW("current len:%d",udp_hdr->len);
+		skb->ip_summed = CHECKSUM_PARTIAL;
+		skb->csum_start = skb_transport_header(skb) - skb->head;
+		skb->csum_offset = offsetof(struct udphdr, check);
+		udp_hdr->check = ~udp_v6_check(ntohs(udp_hdr->len), &ip6_hdr->saddr, &ip6_hdr->daddr, 0);
+
 	/*Insert eth mac header*/
 	__skb_push(skb, sizeof(struct ethhdr));
 	skb_reset_mac_header(skb); /* this adds the mac header offset to the head pointer */
@@ -370,7 +376,6 @@ static inline int build_l2tp_over_udp_hdr(struct sk_buff *skb, unsigned int len,
 
 	/*Change skb proto to v6 and disable checksum and update xmit dev*/
 	skb->protocol = htons(ETH_P_IPV6);
-	skb->ip_summed = CHECKSUM_NONE;
 	skb->dev = dev_get_by_name(
 				&init_net,
 				sfe_l2tp_session_arr.session[session_idx].parent_iface);
