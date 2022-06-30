@@ -699,7 +699,7 @@ static void sfe_ipv4_remove_packet_stats_connection(__be32 client_addr)
 
 static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct sfe_ipv4_packet_stats_list* node)
 {
-	struct sfe_ipv4_packet_stats_list* curr;
+	struct sfe_ipv4_packet_stats_list* curr = NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
@@ -726,7 +726,7 @@ static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct 
 
 static bool sfe_ipv4_update_packet_stats_connection(struct sfe_ipv4 *sic,__be32 client_addr, uint64_t rx_bytes, uint64_t tx_bytes )
 {
-	struct sfe_ipv4_packet_stats_list* curr;
+	struct sfe_ipv4_packet_stats_list* curr = NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	u32 key;
@@ -1039,7 +1039,7 @@ static bool sfe_ipv4_packet_stats_display_connections_connection(struct sfe_ipv4
 {
 	uint32_t bytes_read;
 
-	struct sfe_ipv4_packet_stats_list* curr;
+	struct sfe_ipv4_packet_stats_list* curr = NULL;
 	int bkt;
 	int valid_conn = 0;
 	struct hlist_node *tmp;

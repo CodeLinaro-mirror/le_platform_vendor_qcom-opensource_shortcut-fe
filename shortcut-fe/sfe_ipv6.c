@@ -1164,7 +1164,7 @@ exit1:
 static bool sfe_ipv6_packet_stats_display_connections_connection(struct sfe_ipv6 *si, char *buffer, char *msg, size_t *length,
 		int *total_read, struct sfe_ipv6_packet_stats_xml_write_state *ws)
 {
-	struct sfe_ipv6_packet_stats_list* curr;
+	struct sfe_ipv6_packet_stats_list* curr = NULL;
 	int bkt;
 	struct hlist_node *tmp;
 	uint32_t bytes_read;
