@@ -879,7 +879,7 @@ static bool sfe_ipv6_update_packet_stats_connection(struct sfe_ipv6* sic,struct 
 
 	key = ht_conn_hash((unsigned long *)client_addr);
 	hash_for_each_possible(sic->packet_stats_htable, curr, sfe_ipv6_packet_hash_list, key) {
-		if ((sfe_ipv6_addr_equal(client_addr, (
+		if (NULL != curr && (sfe_ipv6_addr_equal(client_addr, (
 					struct sfe_ipv6_addr *)&curr->
 					packet_stats_node.client_src_addr)))
 		{
@@ -910,11 +910,13 @@ static void sfe_ipv6_reset_packet_stats_counters(struct sfe_ipv6* sic)
 	struct hlist_node *tmp=NULL;
 
 	hash_for_each_safe(sic->packet_stats_htable, bkt, tmp, curr, sfe_ipv6_packet_hash_list) {
-		DEBUG_INFO("reseting counters for client %pI6 \n", &curr->packet_stats_node.client_src_addr[0]);
-		spin_lock_bh(&sic->lock);
-		curr->packet_stats_node.packet_stat_node_rx_byte_count = 0;
-		curr->packet_stats_node.packet_stat_node_tx_byte_count = 0;
-		spin_unlock_bh(&sic->lock);
+		if(NULL != curr) {
+			DEBUG_INFO("reseting counters for client %pI6 \n", &curr->packet_stats_node.client_src_addr[0]);
+			spin_lock_bh(&sic->lock);
+			curr->packet_stats_node.packet_stat_node_rx_byte_count = 0;
+			curr->packet_stats_node.packet_stat_node_tx_byte_count = 0;
+			spin_unlock_bh(&sic->lock);
+		}
 	}
 }
 
@@ -1174,7 +1176,7 @@ static bool sfe_ipv6_packet_stats_display_connections_connection(struct sfe_ipv6
 	spin_lock_bh(&si->lock);
 
 	hash_for_each_safe(si->packet_stats_htable, bkt, tmp, curr, sfe_ipv6_packet_hash_list) {
-		if (curr->packet_stat_node_read_seq < si->pack_stats_read_seq) {
+		if (NULL != curr && curr->packet_stat_node_read_seq < si->pack_stats_read_seq) {
 			curr->packet_stat_node_read_seq = si->pack_stats_read_seq;
 			valid_conn = 1;
 			break;

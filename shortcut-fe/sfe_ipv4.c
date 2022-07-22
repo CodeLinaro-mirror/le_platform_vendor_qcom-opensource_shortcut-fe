@@ -708,7 +708,7 @@ static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct 
 	key = ht_conn_hash(node->packet_stats_node.client_src_addr);
 
 	hash_for_each_possible(si->packet_stats_htable, curr, sfe_ipv4_packet_hash_list, key) {
-		if (node->packet_stats_node.client_src_addr == curr->packet_stats_node.client_src_addr) {
+		if (NULL != curr && node->packet_stats_node.client_src_addr == curr->packet_stats_node.client_src_addr) {
 			return;
 		}
 	}
@@ -736,7 +736,7 @@ static bool sfe_ipv4_update_packet_stats_connection(struct sfe_ipv4 *sic,__be32 
 
 
 	hash_for_each_possible(sic->packet_stats_htable, curr, sfe_ipv4_packet_hash_list, key) {
-		if (client_addr == curr->packet_stats_node.client_src_addr) {
+		if (NULL != curr && client_addr == curr->packet_stats_node.client_src_addr) {
 			curr->packet_stats_node.packet_stat_node_rx_byte_count += rx_bytes;
 			curr->packet_stats_node.packet_stat_node_tx_byte_count += tx_bytes;
 
@@ -764,11 +764,12 @@ static void sfe_ipv4_reset_packet_stats_counters(struct sfe_ipv4* sic)
 
 	hash_for_each_safe(sic->packet_stats_htable, bkt, tmp, curr, sfe_ipv4_packet_hash_list) {
 
-		DEBUG_INFO("reseting counters for client %pI4 \n", &curr->packet_stats_node.client_src_addr);
-
-		curr->packet_stats_node.packet_stat_node_rx_byte_count = 0;
-		curr->packet_stats_node.packet_stat_node_tx_byte_count = 0;
-
+		if(NULL != curr) {
+			DEBUG_INFO("reseting counters for client %pI4 \n",
+				&curr->packet_stats_node.client_src_addr);
+			curr->packet_stats_node.packet_stat_node_rx_byte_count = 0;
+			curr->packet_stats_node.packet_stat_node_tx_byte_count = 0;
+		}
 	}
 	spin_unlock_bh(&sic->lock);
 }
@@ -1048,7 +1049,7 @@ static bool sfe_ipv4_packet_stats_display_connections_connection(struct sfe_ipv4
 	spin_lock_bh(&si->lock);
 
 	hash_for_each_safe(si->packet_stats_htable, bkt, tmp, curr, sfe_ipv4_packet_hash_list) {
-		if (curr->packet_stat_node_read_seq < si->pack_stats_read_seq) {
+		if (NULL != curr && curr->packet_stat_node_read_seq < si->pack_stats_read_seq) {
 			curr->packet_stat_node_read_seq = si->pack_stats_read_seq;
 			valid_conn = 1;
 			break;
