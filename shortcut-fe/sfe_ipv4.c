@@ -664,8 +664,6 @@ static void sfe_ipv4_remove_packet_stats_connection(__be32 client_addr)
 {
 	struct sfe_ipv4 *si = &__si;
 	struct sfe_ipv4_packet_stats_list* curr = NULL;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	spin_lock_bh(&si->lock);
@@ -700,8 +698,6 @@ static void sfe_ipv4_remove_packet_stats_connection(__be32 client_addr)
 static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct sfe_ipv4_packet_stats_list* node)
 {
 	struct sfe_ipv4_packet_stats_list* curr = NULL;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash(node->packet_stats_node.client_src_addr);
@@ -727,8 +723,6 @@ static void sfe_ipv4_insert_packet_stats_connection(struct sfe_ipv4 *si, struct 
 static bool sfe_ipv4_update_packet_stats_connection(struct sfe_ipv4 *sic,__be32 client_addr, uint64_t rx_bytes, uint64_t tx_bytes )
 {
 	struct sfe_ipv4_packet_stats_list* curr = NULL;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash(client_addr);
@@ -1239,7 +1233,6 @@ static struct file_operations sfe_ipv4_packet_stats_fops = {
 };
 static void sfe_ipv4_nl_receive(struct sk_buff *skb)
 {
-	int err;
 	struct nlmsghdr *nlheader;
 	struct nl_rx_buffer *nl_data_ptr = NULL;
 	if (packet_stats_enabled)
@@ -2028,10 +2021,8 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	struct sfe_ipv4_connection_match *cm;
 	uint8_t ttl;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb ;
 	int trim_len = 0;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int ret = 0;
 	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
 	/*
@@ -2279,16 +2270,15 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 				 * For the simple case we write this really fast.
 				 */
 				if (skb_headroom(skb) <
-					xmit_dev->hard_header_len)
-					ret = pskb_expand_head(skb, ETH_HLEN, 0,
-							GFP_ATOMIC);
-					if (ret) {
-						kfree_skb(skb);
-						IPC_DEBUG_LOW(
+				    xmit_dev->hard_header_len)
+					ret = pskb_expand_head(skb, ETH_HLEN, 0, GFP_ATOMIC);
+				if (ret) {
+					kfree_skb(skb);
+					IPC_DEBUG_LOW(
 							"pskb_expand_head failed = %d",
 							ret);
-						return 0;
-					}
+					return 0;
+				}
 
 				eth = (struct sfe_ipv4_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IP);
@@ -2433,13 +2423,10 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	uint8_t ttl;
 	uint32_t flags;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb ;
 	int trim_len = 0;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int ret = 0;
 	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
-	uint32_t data_offs;
 
 
 	/*
@@ -3774,13 +3761,14 @@ void sfe_ipv4_destroy_rule(struct sfe_connection_destroy *sid)
 	 * Check if v4 module loading is complete.
 	 * No need to destroy rule in case module is not even present.
 	 */
+
+	struct sfe_ipv4 *si = &__si;
+	struct sfe_ipv4_connection *c;
 	if (!sfe_ipv4_init_complete) {
 		DEBUG_TRACE_LOW("SFE V4 module not inited\n");
 		return;
 	}
 
-	struct sfe_ipv4 *si = &__si;
-	struct sfe_ipv4_connection *c;
 
 	spin_lock_bh(&si->lock);
 	si->connection_destroy_requests++;
@@ -3912,20 +3900,21 @@ static ssize_t sfe_ipv4_debug_level_low_store(struct device *dev,
 	else {
 		if (tmp) {
 			if (!ipc_sfe_log_ctxt_low) {
-				ipc_sfe_log_ctxt_low =
-						ipc_log_context_create(
-						IPCLOG_STATE_PAGES,
-						"sfe_ipv4_low",
-						0);
+				ipc_sfe_log_ctxt_low = 
+					ipc_log_context_create(
+					IPCLOG_STATE_PAGES,
+					"sfe_ipv4_low"
+					,0);
 			}
 			if (!ipc_sfe_log_ctxt_low) {
 				pr_err("failed to create ipc sfe low context\n");
 				return -EFAULT;
 			}
-		} else {
+		} 
+		else {
 			if (ipc_sfe_log_ctxt_low)
 				ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
-				ipc_sfe_log_ctxt_low = NULL;
+			ipc_sfe_log_ctxt_low = NULL;
 		}
 	}
 	sfe_v4_enable_ipc_low = tmp;
@@ -4101,7 +4090,6 @@ static bool sfe_ipv4_debug_dev_read_connections_connection
 	struct sfe_ipv4_connection *c;
 	struct sfe_ipv4_connection_match *original_cm;
 	struct sfe_ipv4_connection_match *reply_cm;
-	int bytes_read;
 	int protocol;
 	struct net_device *src_dev;
 	__be32 src_ip;
@@ -4256,7 +4244,6 @@ static bool sfe_ipv4_debug_dev_read_stats
 )
 
 {
-	int bytes_read;
 	unsigned int num_connections;
 	uint64_t packets_forwarded;
 	uint64_t packets_not_forwarded;
@@ -4367,19 +4354,29 @@ static ssize_t sfe_ipv4_debug_dev_read(struct file *filp, char *buffer, size_t l
 static ssize_t sfe_ipv4_debug_dev_write(struct file *filp, const char *buffer, size_t length, loff_t *offset)
 {
 	struct sfe_ipv4 *si = &__si;
+#ifdef ISKERNEL5_15
+	int write_ops = 0;
+#else
 	bool write_ops = 0;
-
+#endif
 	memset(temp_buff, 0, sizeof(temp_buff));
 	if (length > MAX_PROC_SIZE)
 		length = MAX_PROC_SIZE;
 	if (copy_from_user(temp_buff, buffer, length))
 		return -EFAULT;
+#ifdef ISKERNEL5_15
+	if (sscanf(temp_buff, "%d", &write_ops) < 0) {
+#else
 	if (sscanf(temp_buff, "%du", &write_ops) < 0) {
+#endif
 		pr_err("scanning failed\n");
 		goto write_done;
 	}
-
+#ifdef ISKERNEL5_15
+	if (write_ops!=0) {
+#else
 	if (write_ops) {
+#endif
 		spin_lock_bh(&si->lock);
 		sfe_ipv4_update_summary_stats(si);
 
@@ -4397,45 +4394,6 @@ static ssize_t sfe_ipv4_debug_dev_write(struct file *filp, const char *buffer, s
 
 write_done:
 	return length;
-}
-
-/*
- * sfe_ipv4_debug_dev_open()
- */
-static int sfe_ipv4_debug_dev_open(struct inode *inode, struct file *file)
-{
-	struct sfe_ipv4_debug_xml_write_state *ws;
-
-	ws = (struct sfe_ipv4_debug_xml_write_state *)file->private_data;
-	if (!ws) {
-		ws = kzalloc(sizeof(struct sfe_ipv4_debug_xml_write_state), GFP_KERNEL);
-		if (!ws) {
-			return -ENOMEM;
-		}
-
-		ws->state = SFE_IPV4_DEBUG_XML_STATE_CONNECTIONS_CONNECTION;
-		file->private_data = ws;
-	}
-
-	return 0;
-}
-
-/*
- * sfe_ipv4_debug_dev_release()
- */
-static int sfe_ipv4_debug_dev_release(struct inode *inode, struct file *file)
-{
-	struct sfe_ipv4_debug_xml_write_state *ws;
-
-	ws = (struct sfe_ipv4_debug_xml_write_state *)file->private_data;
-	if (ws) {
-		/*
-		 * We've finished with our output so free the write state.
-		 */
-		kfree(ws);
-	}
-
-	return 0;
 }
 
 /*
@@ -4491,14 +4449,18 @@ static ssize_t write_to_v4_iface_proc_entry(struct file *file,const char *buf,si
 
 	return count;
 }
-
-
-static struct file_operations ipv4_iface_proc_fops = {
-	.owner = THIS_MODULE,
-	.read = read_from_v4_iface_proc_entry,
-	.write = write_to_v4_iface_proc_entry,
-};
-
+#ifdef ISKERNEL5_15
+	static struct proc_ops proc_ops = {
+		.proc_read = read_from_v4_iface_proc_entry,
+		.proc_write = write_to_v4_iface_proc_entry,
+	};
+#else
+	static struct file_operations ipv4_iface_proc_fops = {
+		.owner = THIS_MODULE,
+		.read = read_from_v4_iface_proc_entry,
+		.write = write_to_v4_iface_proc_entry,
+	};
+#endif
 
 #ifdef CONFIG_NF_FLOW_COOKIE
 /*
@@ -4655,8 +4617,11 @@ static int __init sfe_ipv4_init(void)
 	si->packet_stats_dev = result;
 	//create Hash table
 	hash_init(si->packet_stats_htable);
-
+#ifdef ISKERNEL5_15
+	proc_create("ipv4_iface_name",0,NULL,&proc_ops);
+#else
 	proc_create("ipv4_iface_name",0,NULL,&ipv4_iface_proc_fops);
+#endif
 	memset(si->ipv4_iface,0,MAX_INTF_LEN);
 	si->iface_length=strlen(si->ipv4_iface);
 

@@ -83,6 +83,9 @@ static char *sfe_cm_exception_events_string[SFE_CM_EXCEPTION_MAX] = {
 	"LOCAL_OUT"
 };
 
+int nf_register_net_hooks(struct net *net, const struct nf_hook_ops *reg,unsigned int n);
+void nf_unregister_net_hooks(struct net *net, const struct nf_hook_ops *reg,unsigned int hookcount);
+
 #ifdef FEATURE_L2TP_OVER_SFE
 struct sock *nl_l2tp_sock;
 
@@ -302,7 +305,6 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr,
 {
 	struct neighbour *neigh;
 	struct rtable *rt;
-	struct rt6_info *rt6;
 	struct dst_entry *dst;
 	struct net_device *mac_dev;
 	struct flowi4 flp4;
@@ -1227,11 +1229,13 @@ static int __init sfe_cm_init(void)
 	/*
 	 * Register our netfilter hooks.
 	 */
+
 #ifdef ISKERNEL4_14
 	result = nf_register_net_hooks(&init_net,
-		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+	sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
 #else
-	result = nf_register_hooks(sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
+	result = nf_register_hooks(sfe_cm_ops_post_routing,
+	ARRAY_SIZE(sfe_cm_ops_post_routing));
 #endif
 	if (result < 0) {
 		DEBUG_ERROR("can't register nf post routing hook: %d\n", result);
