@@ -235,13 +235,17 @@ static void sfe_l2tp_find_parent_dev
 #endif
 
 /*Common API for sfe tcpdump enablement */
-static int sfe_tcpdump_enable = 1;
+#ifdef ISKERNEL5_15
+	bool sfe_tcpdump_enable = true;
+#else
+	static int sfe_tcpdump_enable = 1;
+#endif
+
 static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_prev)
 {
 	struct net_device *dev;
-
-	dev = skb->dev;
 	int ret = true;
+	dev = skb->dev;
 
 	if (pt_prev) {
 #if ISKERNEL4_14
