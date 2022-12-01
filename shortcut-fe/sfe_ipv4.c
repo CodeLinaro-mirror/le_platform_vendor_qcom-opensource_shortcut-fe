@@ -4618,8 +4618,11 @@ static int __init sfe_ipv4_init(void)
 	si->packet_stats_dev = result;
 	//create Hash table
 	hash_init(si->packet_stats_htable);
-
+#ifdef ISKERNEL5_15
 	proc_create("ipv4_iface_name",0,NULL,&proc_ops);
+#else
+	proc_create("ipv4_iface_name",0,NULL,&ipv4_iface_proc_fops);
+#endif
 	memset(si->ipv4_iface,0,MAX_INTF_LEN);
 	si->iface_length=strlen(si->ipv4_iface);
 
