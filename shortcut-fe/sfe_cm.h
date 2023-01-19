@@ -305,6 +305,18 @@ static inline int build_l2tp_over_udp_hdr(struct sk_buff *skb, unsigned int len,
 	struct udphdr* udp_hdr;
 	struct sfe_l2tp_udp_hdr* l2tp_hdr;
 	struct ethhdr* eth_mac_hdr;
+	struct net_device* vlan_dev;
+
+	/* only build header and update dev if we get non-NULL dev in dev_get_by_name */
+	vlan_dev = dev_get_by_name(
+				&init_net,
+				sfe_l2tp_session_arr.session[session_idx].parent_iface);
+	if(!vlan_dev){
+		DEBUG_TRACE_LOW("Dev null, skipping header addition, parent iface:%s",
+			sfe_l2tp_session_arr.session[session_idx].parent_iface);
+		return 1;
+	}
+
 	if (skb_headroom(skb) < sizeof(struct sfe_l2tp_udp_hdr) + sizeof(struct udphdr)+ sizeof(struct ipv6hdr) + sizeof(struct ethhdr)){
 		ret = pskb_expand_head(skb,
 				HH_DATA_ALIGN(sizeof(struct sfe_l2tp_udp_hdr) + sizeof(struct udphdr)+ sizeof(struct ipv6hdr) + sizeof(struct ethhdr) - skb_headroom(skb)),
@@ -369,13 +381,7 @@ static inline int build_l2tp_over_udp_hdr(struct sk_buff *skb, unsigned int len,
 
 	/*Change skb proto to v6 and disable checksum and update xmit dev*/
 	skb->protocol = htons(ETH_P_IPV6);
-	skb->dev = dev_get_by_name(
-				&init_net,
-				sfe_l2tp_session_arr.session[session_idx].parent_iface);
-	if(!skb->dev){
-		DEBUG_TRACE_LOW("Dev null, parent iface:%s",
-			sfe_l2tp_session_arr.session[session_idx].parent_iface);
-	}
+	skb->dev = vlan_dev;
 
 	return 1;
 }
