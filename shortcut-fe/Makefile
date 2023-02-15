@@ -30,6 +30,10 @@ ifeq ($(KVER),$(filter 5.4%,$(KVER)))
 ccflags-y += -DISKERNELUPGRADED -DISKERNEL4_14 -DISKERNEL5_4
 endif
 
+ifeq ($(KVER),$(filter 5.15%,$(KVER)))
+ccflags-y += -DISKERNELUPGRADED -DISKERNEL4_14 -DISKERNEL5_4 -DISKERNEL5_15
+endif
+
 obj-m += shortcut-fe.o
 
 ifdef SFE_SUPPORT_IPV6
