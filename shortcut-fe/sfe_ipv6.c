@@ -3381,7 +3381,7 @@ int sfe_ipv6_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 		next_hdr = ext_hdr->next_hdr;
 	}
 	if (unlikely(sfe_tcpdump_enable)) {
-		sfe_tcpdump_log(skb,pt_prev);
+		//sfe_tcpdump_log(skb,pt_prev);
 	}
 #ifdef FEATURE_L2TP_OVER_SFE
 	if (next_hdr == IPPROTO_L2TP)

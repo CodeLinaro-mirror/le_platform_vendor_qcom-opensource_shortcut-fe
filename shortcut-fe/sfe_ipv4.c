@@ -3221,7 +3221,7 @@ int sfe_ipv4_recv(struct net_device *dev, struct sk_buff *skb, struct packet_typ
 	protocol = iph->protocol;
 	/* send to tcpdump before processing on the basis of protocol */
 	if (unlikely(sfe_tcpdump_enable)) {
-		sfe_tcpdump_log(skb,pt_prev);
+		//sfe_tcpdump_log(skb,pt_prev);
 	}
 	if (IPPROTO_TCP == protocol) {
 		return sfe_ipv4_recv_tcp(si, skb, dev, len, iph, ihl, flush_on_find);
