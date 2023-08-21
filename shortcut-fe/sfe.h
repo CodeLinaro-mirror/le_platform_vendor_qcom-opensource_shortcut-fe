@@ -60,7 +60,11 @@
  */
 #define DEBUG_LEVEL 2
 static void *ipc_sfe_log_ctxt;
-static void *ipc_sfe_log_ctxt_low;
+#ifdef ISKERNEL5_15
+	void *ipc_sfe_log_ctxt_low = NULL;
+#else
+	static void *ipc_sfe_log_ctxt_low;
+#endif
 
 #ifdef FEATURE_L2TP_OVER_SFE
 /*
