@@ -2138,8 +2138,11 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	/*
 	 * If our packet is larger than the MTU of the transmit interface then
 	 * we allow if the iface is rmnet_data, else don't allow
+	 * Add GSO check to support coalescing, helps in USB Host mode Tputs
 	 */
-	if (unlikely(len > cm->xmit_dev_mtu)) {
+	DEBUG_TRACE_LOW("sfe_ipv4_recv_udp : skb_len = %u, MTU = %u, skb_is_gso = %d\n",
+						len, cm->xmit_dev_mtu, skb_is_gso(skb));
+	if (unlikely(len > cm->xmit_dev_mtu) && !skb_is_gso(skb)) {
 		if ((strncmp(cm->xmit_dev->name, si->ipv4_iface,
 						strlen(si->ipv4_iface) - 1) != 0) ||
 				!skip_mtu_check) {
@@ -2558,6 +2561,8 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 * If our packet is larger than the MTU of the transmit interface then
 	 * we allow if the iface is rmnet_data, else don't allow
 	 */
+	DEBUG_TRACE_LOW("sfe_ipv4_recv_tcp : skb_len = %u, MTU = %u, skb_is_gso = %d\n",
+						len, cm->xmit_dev_mtu, skb_is_gso(skb));
 	if (unlikely((len > cm->xmit_dev_mtu) && !skb_is_gso(skb))) {
 		if ((strncmp(cm->xmit_dev->name, si->ipv4_iface,
 						strlen(si->ipv4_iface) - 1) != 0) ||

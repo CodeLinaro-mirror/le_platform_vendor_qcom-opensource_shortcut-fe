@@ -2283,8 +2283,11 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	/*
 	 * If our packet is larger than the MTU of the transmit interface then
 	 * we can't forward it easily.
+	 * Add GSO check to support coalescing, helps in USB Host mode Tputs
 	 */
-	if (unlikely(len > cm->xmit_dev_mtu)) {
+	DEBUG_TRACE_LOW("sfe_ipv6_recv_udp : skb_len = %u, MTU = %u, skb_is_gso = %d\n",
+						len, cm->xmit_dev_mtu, skb_is_gso(skb));
+	if (unlikely(len > cm->xmit_dev_mtu) && !skb_is_gso(skb)) {
 		struct sfe_ipv6_connection *c = cm->connection;
 		sfe_ipv6_remove_connection(si, c);
 		si->exception_events[SFE_IPV6_EXCEPTION_EVENT_UDP_NEEDS_FRAGMENTATION]++;
@@ -2670,6 +2673,8 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	 * If our packet is larger than the MTU of the transmit interface then
 	 * we can't forward it easily.
 	 */
+	DEBUG_TRACE_LOW("sfe_ipv6_recv_tcp : skb_len = %u, MTU = %u, skb_is_gso = %d\n",
+						len, cm->xmit_dev_mtu, skb_is_gso(skb));
 	if (unlikely((len > cm->xmit_dev_mtu) && !skb_is_gso(skb))) {
 		struct sfe_ipv6_connection *c = cm->connection;
 		sfe_ipv6_remove_connection(si, c);
