@@ -3,6 +3,8 @@
  *	Shortcut forwarding engine connection manager.
  *
  * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
  * above copyright notice and this permission notice appear in all copies.
@@ -38,6 +40,7 @@
 
 #ifdef FEATURE_L2TP_OVER_SFE
 #define NL_UNICAST_GRP 0
+static bool l2tp_traffic;
 #endif
 
 typedef enum sfe_cm_exception {
@@ -385,7 +388,7 @@ ret_fail:
  */
 static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 {
-	struct sfe_connection_create sic;
+	struct sfe_connection_create *sic;
 	struct net_device *in;
 	struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
@@ -517,69 +520,75 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * Note that the data we get from conntrack is for the "ORIGINAL" direction
 	 * but our packet may actually be in the "REPLY" direction.
 	 */
+	sic = (struct sfe_connection_create *)kmalloc(sizeof(struct sfe_connection_create), GFP_KERNEL);
+	if (sic == NULL)
+	{
+		DEBUG_TRACE("Cannot allocate memory for sic\n");
+		return NF_ACCEPT;
+	}
 	orig_tuple = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
 	reply_tuple = ct->tuplehash[IP_CT_DIR_REPLY].tuple;
-	sic.protocol = (int32_t)orig_tuple.dst.protonum;
+	sic->protocol = (int32_t)orig_tuple.dst.protonum;
 	/*
 	 * Get addressing information, non-NAT first
 	 */
 	if (likely(is_v4)) {
-		sic.src_ip.ip = (__be32)orig_tuple.src.u3.ip;
-		sic.dest_ip.ip = (__be32)orig_tuple.dst.u3.ip;
+		sic->src_ip.ip = (__be32)orig_tuple.src.u3.ip;
+		sic->dest_ip.ip = (__be32)orig_tuple.dst.u3.ip;
 
-		if (ipv4_is_multicast(sic.src_ip.ip) || ipv4_is_multicast(sic.dest_ip.ip)) {
+		if (ipv4_is_multicast(sic->src_ip.ip) || ipv4_is_multicast(sic->dest_ip.ip)) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_IS_IPV4_MCAST);
 			DEBUG_TRACE("multicast address\n");
-			return NF_ACCEPT;
+			goto done4;
 		}
 
 		/*
 		 * NAT'ed addresses - note these are as seen from the 'reply' direction
 		 * When NAT does not apply to this connection these will be identical to the above.
 		 */
-		sic.src_ip_xlate.ip = (__be32)reply_tuple.dst.u3.ip;
-		sic.dest_ip_xlate.ip = (__be32)reply_tuple.src.u3.ip;
+		sic->src_ip_xlate.ip = (__be32)reply_tuple.dst.u3.ip;
+		sic->dest_ip_xlate.ip = (__be32)reply_tuple.src.u3.ip;
 	} else {
-		sic.src_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.src.u3.in6);
-		sic.dest_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.dst.u3.in6);
+		sic->src_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.src.u3.in6);
+		sic->dest_ip.ip6[0] = *((struct sfe_ipv6_addr *)&orig_tuple.dst.u3.in6);
 
-		if (ipv6_addr_is_multicast((struct in6_addr *)sic.src_ip.ip6) ||
-		    ipv6_addr_is_multicast((struct in6_addr *)sic.dest_ip.ip6)) {
+		if (ipv6_addr_is_multicast((struct in6_addr *)sic->src_ip.ip6) ||
+		    ipv6_addr_is_multicast((struct in6_addr *)sic->dest_ip.ip6)) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_IS_IPV6_MCAST);
 			DEBUG_TRACE("multicast address\n");
-			return NF_ACCEPT;
+			goto done4;
 		}
 
 		/*
 		 * NAT'ed addresses - note these are as seen from the 'reply' direction
 		 * When NAT does not apply to this connection these will be identical to the above.
 		 */
-		sic.src_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.dst.u3.in6);
-		sic.dest_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.src.u3.in6);
+		sic->src_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.dst.u3.in6);
+		sic->dest_ip_xlate.ip6[0] = *((struct sfe_ipv6_addr *)&reply_tuple.src.u3.in6);
 	}
 
-	sic.flags = 0;
-	sic.mark = skb->mark;
+	sic->flags = 0;
+	sic->mark = skb->mark;
 
-	switch (sic.protocol) {
+	switch (sic->protocol) {
 	case IPPROTO_TCP:
-		sic.src_port = orig_tuple.src.u.tcp.port;
-		sic.dest_port = orig_tuple.dst.u.tcp.port;
-		sic.src_port_xlate = reply_tuple.dst.u.tcp.port;
-		sic.dest_port_xlate = reply_tuple.src.u.tcp.port;
-		sic.src_td_window_scale = ct->proto.tcp.seen[0].td_scale;
-		sic.src_td_max_window = ct->proto.tcp.seen[0].td_maxwin;
-		sic.src_td_end = ct->proto.tcp.seen[0].td_end;
-		sic.src_td_max_end = ct->proto.tcp.seen[0].td_maxend;
-		sic.dest_td_window_scale = ct->proto.tcp.seen[1].td_scale;
-		sic.dest_td_max_window = ct->proto.tcp.seen[1].td_maxwin;
-		sic.dest_td_end = ct->proto.tcp.seen[1].td_end;
-		sic.dest_td_max_end = ct->proto.tcp.seen[1].td_maxend;
+		sic->src_port = orig_tuple.src.u.tcp.port;
+		sic->dest_port = orig_tuple.dst.u.tcp.port;
+		sic->src_port_xlate = reply_tuple.dst.u.tcp.port;
+		sic->dest_port_xlate = reply_tuple.src.u.tcp.port;
+		sic->src_td_window_scale = ct->proto.tcp.seen[0].td_scale;
+		sic->src_td_max_window = ct->proto.tcp.seen[0].td_maxwin;
+		sic->src_td_end = ct->proto.tcp.seen[0].td_end;
+		sic->src_td_max_end = ct->proto.tcp.seen[0].td_maxend;
+		sic->dest_td_window_scale = ct->proto.tcp.seen[1].td_scale;
+		sic->dest_td_max_window = ct->proto.tcp.seen[1].td_maxwin;
+		sic->dest_td_end = ct->proto.tcp.seen[1].td_end;
+		sic->dest_td_max_end = ct->proto.tcp.seen[1].td_maxend;
 		tcp_net = &net->ct.nf_ct_proto.tcp;
 		if (tcp_net->tcp_be_liberal
 		    || (ct->proto.tcp.seen[0].flags & IP_CT_TCP_FLAG_BE_LIBERAL)
 		    || (ct->proto.tcp.seen[1].flags & IP_CT_TCP_FLAG_BE_LIBERAL)) {
-			sic.flags |= SFE_CREATE_FLAG_NO_SEQ_CHECK;
+			sic->flags |= SFE_CREATE_FLAG_NO_SEQ_CHECK;
 		}
 
 		/*
@@ -588,7 +597,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 		if (!test_bit(IPS_ASSURED_BIT, &ct->status)) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_TCP_NOT_ASSURED);
 			DEBUG_TRACE("non-established connection\n");
-			return NF_ACCEPT;
+			goto done4;
 		}
 
 		/*
@@ -601,44 +610,44 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 			spin_unlock_bh(&ct->lock);
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_TCP_NOT_ESTABLISHED);
 			DEBUG_TRACE("connection in termination state: %#x, s: %pI4:%u, d: %pI4:%u\n",
-				    ct->proto.tcp.state, &sic.src_ip, ntohs(sic.src_port),
-				    &sic.dest_ip, ntohs(sic.dest_port));
-			return NF_ACCEPT;
+				    ct->proto.tcp.state, &sic->src_ip, ntohs(sic->src_port),
+				    &sic->dest_ip, ntohs(sic->dest_port));
+			goto done4;
 		}
 		spin_unlock_bh(&ct->lock);
 		break;
 
 	case IPPROTO_UDP:
-		sic.src_port = orig_tuple.src.u.udp.port;
-		sic.dest_port = orig_tuple.dst.u.udp.port;
-		sic.src_port_xlate = reply_tuple.dst.u.udp.port;
-		sic.dest_port_xlate = reply_tuple.src.u.udp.port;
+		sic->src_port = orig_tuple.src.u.udp.port;
+		sic->dest_port = orig_tuple.dst.u.udp.port;
+		sic->src_port_xlate = reply_tuple.dst.u.udp.port;
+		sic->dest_port_xlate = reply_tuple.src.u.udp.port;
 		break;
 
 	default:
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_UNKNOW_PROTOCOL);
-		DEBUG_TRACE("unhandled protocol %d\n", sic.protocol);
-		return NF_ACCEPT;
+		DEBUG_TRACE("unhandled protocol %d\n", sic->protocol);
+		goto done4;
 	}
 
 #ifdef CONFIG_XFRM
-	sic.original_accel = 1;
-	sic.reply_accel = 1;
+	sic->original_accel = 1;
+	sic->reply_accel = 1;
 
 	/*
 	 * For packets de-capsulated from xfrm, we still can accelerate it
 	 * on the direction we just received the packet.
 	 */
 	if (unlikely(skb->sp)) {
-		if (sic.protocol == IPPROTO_TCP &&
-			!(sic.flags & SFE_CREATE_FLAG_NO_SEQ_CHECK)) {
-			return NF_ACCEPT;
+		if (sic->protocol == IPPROTO_TCP &&
+			!(sic->flags & SFE_CREATE_FLAG_NO_SEQ_CHECK)) {
+			goto done4;
 		}
 
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
-			sic.reply_accel = 0;
+			sic->reply_accel = 0;
 		} else {
-			sic.original_accel = 0;
+			sic->original_accel = 0;
 		}
 	}
 #endif
@@ -648,32 +657,32 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * destination host addresses.
 	 */
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip, &src_dev,
-					sic.src_mac, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->src_ip, &src_dev,
+					sic->src_mac, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_DEV);
-		return NF_ACCEPT;
+		goto done4;
 	}
 
 	src_dev_use = src_dev;
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.src_ip_xlate, &dev,
-					sic.src_mac_xlate, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->src_ip_xlate, &dev,
+					sic->src_mac_xlate, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_SRC_XLATE_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip, &dev,
-					sic.dest_mac, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->dest_ip, &dev,
+					sic->dest_mac, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_DEV);
 		goto done1;
 	}
 
 	dev_put(dev);
 
-	if (!sfe_cm_find_dev_and_mac_addr(&sic.dest_ip_xlate, &dest_dev,
-					sic.dest_mac_xlate, is_v4, sic.mark)) {
+	if (!sfe_cm_find_dev_and_mac_addr(&sic->dest_ip_xlate, &dest_dev,
+					sic->dest_mac_xlate, is_v4, sic->mark)) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_DEST_XLATE_DEV);
 		goto done1;
 	}
@@ -685,7 +694,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * the case then we need to hunt down the underlying interface.
 	 */
 	if (src_dev->priv_flags & IFF_EBRIDGE) {
-		src_br_dev = br_port_dev_get(src_dev, sic.src_mac);
+		src_br_dev = br_port_dev_get(src_dev, sic->src_mac);
 		if (!src_br_dev) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_BRIDGE);
 			DEBUG_TRACE("no port found on bridge\n");
@@ -695,7 +704,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	}
 
 	if (dest_dev->priv_flags & IFF_EBRIDGE) {
-		dest_br_dev = br_port_dev_get(dest_dev, sic.dest_mac_xlate);
+		dest_br_dev = br_port_dev_get(dest_dev, sic->dest_mac_xlate);
 		if (!dest_br_dev) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_BRIDGE);
 			DEBUG_TRACE("no port found on bridge\n");
@@ -740,27 +749,27 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 
 	if (l2tp_traffic) {
 		memcpy(
-			sic.sfe_config_hash,
-			sfe_l2tp_ht,
-			sizeof(sic.sfe_config_hash));
-		sic.l2tp_traffic = l2tp_traffic;
-		sic.parent_dev = NULL;
+			&sic->sfe_config_array,
+			&sfe_l2tp_session_arr,
+			sizeof(sic->sfe_config_array));
+		sic->l2tp_traffic = l2tp_traffic;
+		sic->parent_dev = NULL;
 	}
 #endif
 
-	sic.src_dev = src_dev_use;
-	sic.dest_dev = dest_dev_use;
+	sic->src_dev = src_dev_use;
+	sic->dest_dev = dest_dev_use;
 
-	sic.src_mtu = src_dev_use->mtu;
-	sic.dest_mtu = dest_dev_use->mtu;
+	sic->src_mtu = src_dev_use->mtu;
+	sic->dest_mtu = dest_dev_use->mtu;
 
 	if (likely(is_v4)) {
-		if (sfe_ipv4_create_rule(&sic) == 0) {
-				ct->sfe_entry = (void *)(&sic);
+		if (sfe_ipv4_create_rule(sic) == 0) {
+				ct->sfe_entry = (void *)(sic);
 			}
 	} else {
-		if (sfe_ipv6_create_rule(&sic) == 0) {
-				ct->sfe_entry = (void *)(&sic);
+		if (sfe_ipv6_create_rule(sic) == 0) {
+				ct->sfe_entry = (void *)(sic);
 			}
 	}
 
@@ -781,6 +790,9 @@ done2:
 
 done1:
 	dev_put(src_dev);
+
+done4:
+	kfree(sic);
 
 	return NF_ACCEPT;
 }
@@ -1111,26 +1123,93 @@ static ssize_t sfe_cm_get_exceptions(struct device *dev,
 /* common api to add l2tp entry to hash array*/
 static inline void add_l2tp_entry_to_ht(struct sfe_l2tp_config *conf)
 {
-	sfe_l2tp_ht[conf->session_id].command = conf->command;
-
-	if (conf->session_id < 0 || conf->session_id >= SFE_L2TP_MAX_CONF) {
-		DEBUG_INFO("session_id out of range\n");
+	int i=0;
+	if (sfe_l2tp_session_arr.num_sessions ==  SFE_L2TP_MAX_CONF) {
+		DEBUG_INFO("Exceeded number of L2TP UDP sessions \n");
 		return;
 	}
-	sfe_l2tp_ht[conf->session_id].session_id = conf->session_id;
 
-	strlcpy(
-		sfe_l2tp_ht[conf->session_id].l2tp_iface,
-		conf->l2tp_iface,
-		MAX_IFACE_NAME_SIZE);
-	strlcpy(
-		sfe_l2tp_ht[conf->session_id].parent_iface,
-		conf->parent_iface, MAX_IFACE_NAME_SIZE);
+	/* check for duplicates*/
+	for (i=0;i<SFE_L2TP_MAX_CONF;i++) {
+		if (sfe_l2tp_session_arr.session[i].local_tunnel_id == conf->local_tunnel_id &&
+			sfe_l2tp_session_arr.session[i].session_id == conf->session_id &&
+			sfe_l2tp_session_arr.session[i].peer_session_id == conf->peer_session_id &&
+			sfe_l2tp_session_arr.session[i].src_port == conf->src_port &&
+			sfe_l2tp_session_arr.session[i].dest_port == conf->dest_port){
+			DEBUG_INFO("Duplicate tunnel/session. Bail \n");
+		return;
+	}
+	}
 
-	DEBUG_INFO(
-		"values of L2TP config l2tp_intf = %s, parent = %s\n",
-		sfe_l2tp_ht[conf->session_id].l2tp_iface,
-		sfe_l2tp_ht[conf->session_id].parent_iface);
+	/* find a free entry and add a session */
+	for (i=0;i<SFE_L2TP_MAX_CONF;i++) {
+		if (sfe_l2tp_session_arr.session[i].local_tunnel_id == 0 &&
+			sfe_l2tp_session_arr.session[i].session_id == 0 &&
+			sfe_l2tp_session_arr.session[i].peer_session_id == 0 &&
+			sfe_l2tp_session_arr.session[i].src_port == 0 &&
+			sfe_l2tp_session_arr.session[i].dest_port == 0)
+		{
+			sfe_l2tp_session_arr.session[i].command = conf->command;
+			sfe_l2tp_session_arr.session[i].local_tunnel_id = conf->local_tunnel_id;
+			sfe_l2tp_session_arr.session[i].session_id = conf->session_id;
+			sfe_l2tp_session_arr.session[i].peer_session_id = conf->peer_session_id;
+
+			strlcpy(
+				sfe_l2tp_session_arr.session[i].l2tp_iface,
+				conf->l2tp_iface,
+				MAX_IFACE_NAME_SIZE);
+			strlcpy(
+				sfe_l2tp_session_arr.session[i].parent_iface,
+				conf->parent_iface, MAX_IFACE_NAME_SIZE);
+
+			DEBUG_INFO(
+				"values of L2TP config l2tp_intf = %s, parent = %s\n, session_id=%u, peer_session_id:%u",
+				sfe_l2tp_session_arr.session[i].l2tp_iface,
+				sfe_l2tp_session_arr.session[i].parent_iface,
+				sfe_l2tp_session_arr.session[i].session_id,
+				sfe_l2tp_session_arr.session[i].peer_session_id);
+
+			memcpy(
+				sfe_l2tp_session_arr.session[i].src_addr,
+				conf->src_addr,
+				sizeof(sfe_l2tp_session_arr.session[i].src_addr));
+			memcpy(
+				sfe_l2tp_session_arr.session[i].dest_addr,
+				conf->dest_addr,
+				sizeof(sfe_l2tp_session_arr.session[i].dest_addr));
+
+			sfe_l2tp_session_arr.session[i].src_port = conf->src_port;
+			sfe_l2tp_session_arr.session[i].dest_port = conf->dest_port;
+
+			memcpy(
+				sfe_l2tp_session_arr.session[i].mac_addr_src,
+				conf->mac_addr_src,
+				sizeof(sfe_l2tp_session_arr.session[i].mac_addr_src));
+			memcpy(
+				sfe_l2tp_session_arr.session[i].mac_addr_dest,
+				conf->mac_addr_dest,
+				sizeof(sfe_l2tp_session_arr.session[i].mac_addr_dest));
+
+			DEBUG_INFO("SRC mac:%x:%x:%x:%x:%x:%x	DEST mac:%x:%x:%x:%x:%x:%x srcport:%d destport: %d",
+				sfe_l2tp_session_arr.session[i].mac_addr_src[0],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[1],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[2],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[3],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[4],
+				sfe_l2tp_session_arr.session[i].mac_addr_src[5],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[0],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[1],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[2],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[3],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[4],
+				sfe_l2tp_session_arr.session[i].mac_addr_dest[5],
+				sfe_l2tp_session_arr.session[i].src_port,
+				sfe_l2tp_session_arr.session[i].dest_port);
+
+			sfe_l2tp_session_arr.num_sessions++;
+			break;
+		}
+	}
 }
 
 
@@ -1138,6 +1217,8 @@ static void sfe_l2tp_nl_receive(struct sk_buff *skb)
 {
 	struct nlmsghdr *nlheader;
 	struct sfe_l2tp_config *nl_l2tp_ptr = NULL;
+	int i=0;
+	DEBUG_ERROR("NL received\n");
 
 	nl_l2tp_ptr = kmalloc(sizeof(struct sfe_l2tp_config), GFP_KERNEL);
 
@@ -1151,32 +1232,49 @@ static void sfe_l2tp_nl_receive(struct sk_buff *skb)
 			nlmsg_data(nlheader), sizeof(struct sfe_l2tp_config));
 	gPID = nlheader->nlmsg_pid;
 
-	if (sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id < 0 ||
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id >=
-			SFE_L2TP_MAX_CONF) {
-		DEBUG_INFO("session_id out of range\n");
-		goto Free_nl_l2tp_ptr;
-	}
+	DEBUG_ERROR("NL received: command: %d\n", nl_l2tp_ptr->command);
 
 	if (nl_l2tp_ptr->command == SFE_PASS_L2TP_CONFIG_TO_SFE) {
 		l2tp_traffic = true;
 		add_l2tp_entry_to_ht(nl_l2tp_ptr);
 	} else if (nl_l2tp_ptr->command == SFE_DEL_L2TP_CONFIG_FROM_SFE) {
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].command = 0;
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].local_tunnel_id = 0;
-		sfe_l2tp_ht[nl_l2tp_ptr->session_id].session_id = 0;
-		memset(
-			sfe_l2tp_ht[nl_l2tp_ptr->session_id].parent_iface,
-			0,
-			MAX_IFACE_NAME_SIZE);
-		memset(
-			sfe_l2tp_ht[nl_l2tp_ptr->session_id].l2tp_iface,
-			0,
-			MAX_IFACE_NAME_SIZE);
+		for (i=0;i<SFE_L2TP_MAX_CONF;i++) {
+			if (sfe_l2tp_session_arr.session[i].local_tunnel_id == nl_l2tp_ptr->local_tunnel_id &&
+				sfe_l2tp_session_arr.session[i].session_id == nl_l2tp_ptr->session_id &&
+				sfe_l2tp_session_arr.session[i].peer_session_id == nl_l2tp_ptr->peer_session_id &&
+				sfe_l2tp_session_arr.session[i].src_port == nl_l2tp_ptr->src_port &&
+				sfe_l2tp_session_arr.session[i].dest_port == nl_l2tp_ptr->dest_port)
+			{
+				sfe_l2tp_session_arr.session[i].command = 0;
+				sfe_l2tp_session_arr.session[i].local_tunnel_id = 0;
+				sfe_l2tp_session_arr.session[i].session_id = 0;
+				sfe_l2tp_session_arr.session[i].peer_session_id = 0;
+				memset(sfe_l2tp_session_arr.session[i].parent_iface,
+					0, MAX_IFACE_NAME_SIZE);
+				memset(sfe_l2tp_session_arr.session[i].l2tp_iface,
+					0, MAX_IFACE_NAME_SIZE);
+				memset(sfe_l2tp_session_arr.session[i].src_addr,
+					0, sizeof(sfe_l2tp_session_arr.session[i].src_addr));
+				memset(sfe_l2tp_session_arr.session[i].dest_addr,
+					0, sizeof(sfe_l2tp_session_arr.session[i].dest_addr));
+				sfe_l2tp_session_arr.session[i].src_port = 0;
+				sfe_l2tp_session_arr.session[i].dest_port = 0;
+				memset(sfe_l2tp_session_arr.session[i].mac_addr_src,
+					0, sizeof(sfe_l2tp_session_arr.session[i].mac_addr_src));
+				memset(sfe_l2tp_session_arr.session[i].mac_addr_dest,
+					0, sizeof(sfe_l2tp_session_arr.session[i].mac_addr_dest));
+				/* decrease session */
+				if (sfe_l2tp_session_arr.num_sessions > 0) {
+					sfe_l2tp_session_arr.num_sessions--;
+				}
+			}
 	}
-Free_nl_l2tp_ptr:
+		
+	}
+/*Free_nl_l2tp_ptr:*/
 	kfree(nl_l2tp_ptr);
 }
+
 #endif
 
 /*
@@ -1252,6 +1350,7 @@ static int __init sfe_cm_init(void)
 		DEBUG_ERROR("Error creating SFE L2TP NL socket");
 		goto exit3;
 	}
+	DEBUG_ERROR("created SFE L2TP NL socket");
 #endif
 
 	/*

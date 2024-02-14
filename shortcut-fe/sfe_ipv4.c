@@ -30,6 +30,11 @@
 
 #include "sfe.h"
 #include "sfe_cm.h"
+
+#ifdef FEATURE_L2TP_OVER_SFE
+struct sfe_l2tp_session_array sfe_l2tp_session_arr;
+#endif
+
 #define PKT_THRESHOLD 10
 #define TIMEOUT 100
 #define PACKETS_STATS_ENABLED 0
@@ -2026,6 +2031,10 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	int ret = 0;
 	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
+#ifdef FEATURE_L2TP_OVER_SFE
+	int session_idx = -1;
+	struct net_device *dest_br_dev = NULL;
+#endif
 	/*
 	 * Is our packet too short to contain a valid UDP header?
 	 */
@@ -2242,6 +2251,14 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 
 	c = cm->connection;
 
+#ifdef FEATURE_L2TP_OVER_SFE
+	DEBUG_TRACE_LOW("Checking for a session match for DL transfer");
+
+	session_idx = find_l2tp_dev_in_sfe_l2tp_arr(cm->xmit_dev->name, strlen(cm->xmit_dev->name));
+
+	DEBUG_TRACE_LOW("Session index stored: %d", session_idx);
+#endif
+
 	if (likely(c->use_destMac || cm->addEthMAC)) {
 		/*
 		 * Check to see if we need to write a header.
@@ -2290,9 +2307,42 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
 				trim_len = ETH_HLEN;
+#ifdef FEATURE_L2TP_OVER_SFE
+				if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+					dest_br_dev = sfe_dev_get_bridge(cm->xmit_dev);
+					if (!dest_br_dev) {
+						DEBUG_TRACE_LOW("no bridge found for: %s\n",
+							cm->xmit_dev->name);
+					}
+					else{
+						DEBUG_TRACE_LOW("bridge found for: %s = %s\n",
+							cm->xmit_dev->name, dest_br_dev->name);
+						memcpy(&eth->h_source[0], dest_br_dev->dev_addr,
+							ETH_ALEN);
+					}
+				}
+#endif
 			}
 		}
 	}
+
+#ifdef FEATURE_L2TP_OVER_SFE
+/*strcmp with xmit_dev and sfe_l2tp_config->l2tp_iface and find match */
+
+	DEBUG_TRACE_LOW("IPV4 cm->xmit_dev:%s cm->match->dev:%s",
+		cm->xmit_dev->name,cm->match_dev->name);
+
+	if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+		trim_len = 0;
+		if(build_l2tp_over_udp_hdr(skb, len, session_idx)!=0){
+			DEBUG_TRACE_LOW("Header insertion complete");
+		}
+		else{
+			DEBUG_TRACE_LOW("Header insertion failure");
+			return 0;
+		}
+		}
+#endif
 
 #ifdef SFE_CONFIG_MARK
 	/*
@@ -2428,8 +2478,10 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	int ret = 0;
 	struct sfe_ipv4_eth_hdr *eth;
 	struct sfe_ipv4_connection *c;
-
-
+#ifdef FEATURE_L2TP_OVER_SFE
+	int session_idx = -1;
+	struct net_device *dest_br_dev = NULL;
+#endif
 	/*
 	 * Is our packet too short to contain a valid UDP header?
 	 */
@@ -2831,6 +2883,15 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	skb->dev = xmit_dev;
 
 	c = cm->connection;
+
+#ifdef FEATURE_L2TP_OVER_SFE
+	DEBUG_TRACE_LOW("Checking for a session match for DL transfer");
+
+	session_idx = find_l2tp_dev_in_sfe_l2tp_arr(cm->xmit_dev->name, strlen(cm->xmit_dev->name));
+
+	DEBUG_TRACE_LOW("Session index stored: %d", session_idx);
+#endif
+
 	if (likely(c->use_destMac || cm->addEthMAC)) {
 		/*
 		 * Check to see if we need to write a header.
@@ -2870,7 +2931,6 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 					}
 				}
 
-
 				eth = (struct sfe_ipv4_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IP);
 				eth->h_dest[0] = cm->xmit_dest_mac[0];
@@ -2880,9 +2940,43 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 				eth->h_source[1] = cm->xmit_src_mac[1];
 				eth->h_source[2] = cm->xmit_src_mac[2];
 				trim_len = ETH_HLEN;
+#ifdef FEATURE_L2TP_OVER_SFE
+				if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+					dest_br_dev = sfe_dev_get_bridge(cm->xmit_dev);
+					if (!dest_br_dev) {
+						DEBUG_TRACE_LOW("no bridge found for: %s\n",
+							cm->xmit_dev->name);
+					}
+					else{
+						DEBUG_TRACE_LOW("bridge found for: %s = %s\n",
+							cm->xmit_dev->name, dest_br_dev->name);
+						memcpy(&eth->h_source[0], dest_br_dev->dev_addr,
+							ETH_ALEN);
+					}
+				}
+#endif
 			}
 		}
 	}
+
+#ifdef FEATURE_L2TP_OVER_SFE
+	/*strcmp with xmit_dev and sfe_l2tp_config->l2tp_iface and find match */
+
+	DEBUG_TRACE_LOW("IPV4 cm->xmit_dev:%s cm->match->dev:%s",
+		cm->xmit_dev->name,cm->match_dev->name);
+
+		if(SFE_L2TP_MAX_CONF > session_idx && session_idx >= 0){
+			trim_len = 0;
+		if(build_l2tp_over_udp_hdr(skb, len, session_idx)!=0){
+			DEBUG_TRACE_LOW("Header insertion complete");
+		}
+		else{
+			DEBUG_TRACE_LOW("Header insertion failure");
+					return 0;
+				}
+			}
+
+#endif
 
 #ifdef SFE_CONFIG_MARK
 	/*
@@ -3423,7 +3517,7 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 		DEBUG_TRACE_LOW("l2tp_traffic is enabled\n");
 		sfe_l2tp_find_parent_dev(
 			sic->src_dev->name,
-			sic->sfe_config_hash,
+			&sic->sfe_config_array,
 			&(sic->parent_dev));
 		if (sic->parent_dev != NULL) {
 			parent_dev = sic->parent_dev;
@@ -4718,7 +4812,10 @@ static void __exit sfe_ipv4_exit(void)
 }
 
 	module_init(sfe_ipv4_init)
-module_exit(sfe_ipv4_exit)
+	module_exit(sfe_ipv4_exit)
+#ifdef FEATURE_L2TP_OVER_SFE
+	EXPORT_SYMBOL(sfe_l2tp_session_arr);
+#endif
 	EXPORT_SYMBOL(sfe_ipv4_recv);
 	EXPORT_SYMBOL(sfe_ipv4_create_rule);
 	EXPORT_SYMBOL(sfe_ipv4_destroy_rule);
