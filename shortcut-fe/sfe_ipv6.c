@@ -46,7 +46,7 @@
 #define INNER_HDR_SIZE 14
 #endif
 #define SFE_DEBUGFS_V6_RW_PERM 0664
-#define SFE_DEBUGFS_V6_READ_LEN 3000
+#define SFE_DEBUGFS_V6_READ_LEN 5000
 
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
