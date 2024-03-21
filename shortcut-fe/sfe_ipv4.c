@@ -36,6 +36,7 @@
 #define PACKETS_STATS_ENABLED 0
 #define SFE_DEBUGFS_RW_PERM 0664
 #define SFE_DEBUGFS_READ_LEN 5000
+#define SFE_DEBUGFS_READ_LEN_MAX 10000
 
 int var_timeout = TIMEOUT;
 int var_thresh = PKT_THRESHOLD;
@@ -44,14 +45,17 @@ int threshold_count;
 int timeout_count;
 int packet_stats_enabled = PACKETS_STATS_ENABLED;
 bool sfe_ipv4_init_complete;
+int var_debugfs_read_len = SFE_DEBUGFS_READ_LEN;
 
-#define XDBG_ADD_PROC_ENTRY(it, name, xdata)             \
+static int sfe_read_len_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
+
+#define XDBG_ADD_PROC_ENTRY(it, name, xdata, handler_check)             \
 {                                                 \
 	.procname       = (name),                 \
 	.data           = (xdata),                \
 	.maxlen         = sizeof(int),            \
 	.mode           = 0666,                   \
-	.proc_handler   = &proc_dointvec,         \
+	.proc_handler   = ((handler_check) ? &proc_dointvec : &sfe_read_len_handler),         \
 }
 
 enum {
@@ -62,15 +66,35 @@ enum {
 	XDBG_MAX
 };
 
+/*
+ * Defined a custom proc_handler for proc sfe_debugfs_read_len
+ * Checks for min and max allowed value
+ */
+static int sfe_read_len_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos)
+{   int ret;
+    ret = proc_dointvec(table, write, buffer, lenp, ppos);
+    if (var_debugfs_read_len > SFE_DEBUGFS_READ_LEN_MAX){
+	pr_warn("Alert: MAX allowed value is %d, defaulting to max %d \n", SFE_DEBUGFS_READ_LEN_MAX);
+	var_debugfs_read_len = SFE_DEBUGFS_READ_LEN_MAX;
+    }
+    if (var_debugfs_read_len < SFE_DEBUGFS_READ_LEN){
+	pr_warn("Alert: MIN allowed value is %d, defaulting to min %d \n", SFE_DEBUGFS_READ_LEN);
+	var_debugfs_read_len = SFE_DEBUGFS_READ_LEN;
+    }
+
+    return ret;
+}
+
 static struct ctl_table sfe_sysctl_debug[] =
 {
-	XDBG_ADD_PROC_ENTRY(XDBG_TIMER_STEP_DBG, "timeout_value", &var_timeout),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold", &var_thresh),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold_count", &threshold_count),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "timeout_count", &timeout_count),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "skip_mtu_check", &skip_mtu_check),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG,"sfe_tcpdump_enable",&sfe_tcpdump_enable),
-	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "packet_stats_on", &packet_stats_enabled),
+	XDBG_ADD_PROC_ENTRY(XDBG_TIMER_STEP_DBG, "timeout_value", &var_timeout, 1),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold", &var_thresh, 1),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "threshold_count", &threshold_count, 1),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "timeout_count", &timeout_count, 1),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "skip_mtu_check", &skip_mtu_check, 1),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG,"sfe_tcpdump_enable",&sfe_tcpdump_enable, 1),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "packet_stats_on", &packet_stats_enabled, 1),
+	XDBG_ADD_PROC_ENTRY(XDBG_THRESHOLD_STEP_DBG, "sfe_debugfs_read_len", &var_debugfs_read_len, 0),
 	{},
 };
 
@@ -4330,7 +4354,7 @@ sfe_ipv4_debug_xml_write_method_t sfe_ipv4_debug_xml_write_methods[SFE_IPV4_DEBU
 static ssize_t sfe_ipv4_debug_dev_read(struct file *filp, char *buffer, size_t length, loff_t *offset)
 {
 	struct sfe_ipv4_debug_xml_write_state *ws;
-	int total_read = SFE_DEBUGFS_READ_LEN, len = 0;
+	int total_read = var_debugfs_read_len, len = 0;
 	ssize_t ret_cnt = 0;
 	struct sfe_ipv4 *si = &__si;
 	char *buff;
