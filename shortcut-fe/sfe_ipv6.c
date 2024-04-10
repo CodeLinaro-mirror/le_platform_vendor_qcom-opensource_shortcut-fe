@@ -590,9 +590,6 @@ enum sfe_ipv6_debug_xml_states {
 	SFE_IPV6_DEBUG_XML_STATE_DONE
 };
 
-/*Parameters for debugfs*/
-struct dentry *sfe_ipv6_dent;
-struct dentry *sfe_ipv6_entry;
 #define MAX_PROC_SIZE 10
 #define MAX_BUFF_SIZE 1024
 char temp_buff[MAX_BUFF_SIZE];
@@ -4402,15 +4399,16 @@ static sfe_ipv6_debug_xml_write_method_t sfe_ipv6_debug_xml_write_methods[SFE_IP
 };
 
 /*
- * sfe_ipv6_debug_dev_read()
+ * sfe_ipv6_debug_stat_show()
  *	Send info to userspace upon read request from user
  */
-static ssize_t sfe_ipv6_debug_dev_read(struct file *filp, char *buffer, size_t length, loff_t *offset)
+static ssize_t sfe_ipv6_debug_stat_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
 {
+
 	int total_read = SFE_DEBUGFS_V6_READ_LEN, len = 0;
 	struct sfe_ipv6_debug_xml_write_state *ws;
 	struct sfe_ipv6 *si = &__si6;
-	ssize_t ret_cnt;
 	char *buff;
 
 	buff = kzalloc(total_read, GFP_KERNEL);
@@ -4438,19 +4436,21 @@ static ssize_t sfe_ipv6_debug_dev_read(struct file *filp, char *buffer, size_t l
 	if (len > total_read)
 		len = total_read;
 
-	ret_cnt = simple_read_from_buffer(buffer, length, offset, buff, len);
+	memcpy(buf, buff, len);
 	kfree(buff);
 	kfree(ws);
 
-	return ret_cnt;
+	return len;
 
 }
 
 /*
- * sfe_ipv6_debug_dev_write()
+ * sfe_ipv6_debug_stat_store()
  *	Write to char device resets some stats
  */
-static ssize_t sfe_ipv6_debug_dev_write(struct file *filp, const char *buffer, size_t length, loff_t *offset)
+static ssize_t sfe_ipv6_debug_stat_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
 {
 	struct sfe_ipv6 *si = &__si6;
 
@@ -4468,7 +4468,7 @@ static ssize_t sfe_ipv6_debug_dev_write(struct file *filp, const char *buffer, s
 	si->connection_match_hash_reorders64 = 0;
 	spin_unlock_bh(&si->lock);
 
-	return length;
+	return count;
 }
 
 
@@ -4491,16 +4491,11 @@ static int sfe_ipv6_debug_dev_release(struct inode *inode, struct file *file)
 }
 
 /*
- * File operations used in the debug char device
+ * sysfs attributes.
  */
-static struct file_operations sfe_ipv6_debug_dev_fops = {
-	.read = sfe_ipv6_debug_dev_read,
-	.write = sfe_ipv6_debug_dev_write,
-	.open = simple_open,
-	.owner = THIS_MODULE,
-	.llseek = default_llseek,
-
-};
+static const struct device_attribute sfe_ipv6_debug_stat =
+__ATTR(sfe_ipv6_debug, SFE_DEBUGFS_V6_RW_PERM,
+	sfe_ipv6_debug_stat_show, sfe_ipv6_debug_stat_store);
 
 static ssize_t
 read_from_v6_iface_proc_entry(
@@ -4611,9 +4606,6 @@ static int __init sfe_ipv6_init(void)
 
 	DEBUG_INFO("SFE IPv6 init\n");
 
-	/*register debugfs*/
-	sfe_ipv6_dent = debugfs_create_dir("sfe_ipv6", NULL);
-
 	/*register proc sys*/
 	si->proc1.sfe_debug_ctl_path[0].procname = "debug_v6";
 	si->proc1.debug_root[0].procname = "sfe_v6";
@@ -4670,12 +4662,14 @@ static int __init sfe_ipv6_init(void)
 		goto exit5;
 	}
 
-	sfe_ipv6_entry = debugfs_create_file("sfe_ipv6_debug",
-		(SFE_DEBUGFS_V6_RW_PERM), sfe_ipv6_dent, 0,
-					&sfe_ipv6_debug_dev_fops);
-	if (IS_ERR_OR_NULL(sfe_ipv6_entry)) {
-		DEBUG_ERROR("Failed to register debugfs\n");
-		result = -EFAULT;
+	/*
+	 * Create sys/sfe_ipv6/sfe_ipv6_debug
+	 */
+	result = sysfs_create_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_stat.attr);
+	if (result) {
+		DEBUG_ERROR(
+			"failed to create sfe_ipv4_debug file: %d for ipv4 connection\n",
+			result);
 		goto exit6;
 	}
 
@@ -4687,7 +4681,7 @@ static int __init sfe_ipv6_init(void)
 	si->sys_sfe_ipv6_packet_stats = kobject_create_and_add("sfe_packet_stats_ipv6", NULL);
 	if (!si->sys_sfe_ipv6_packet_stats) {
 		DEBUG_ERROR("failed to register sfe_packet_stats_ipv6\n");
-		goto exit6;
+		goto exit7;
 	}
 
 	/*
@@ -4696,7 +4690,7 @@ static int __init sfe_ipv6_init(void)
 	result = sysfs_create_file(si->sys_sfe_ipv6_packet_stats, &sfe_ipv6_packet_stats_dev_attr.attr);
 	if (result) {
 		DEBUG_ERROR("failed to register packet stat dev file: %d\n", result);
-		goto exit7;
+		goto exit8;
 	}
 
 	/*
@@ -4705,7 +4699,7 @@ static int __init sfe_ipv6_init(void)
 	result = register_chrdev(0, "sfe_packet_stats_ipv6", &sfe_ipv6_packet_stats_fops);
 	if (result < 0) {
 		DEBUG_ERROR("Failed to register packet stats chrdev: %d\n", result);
-		goto exit8;
+		goto exit9;
 	}
 
 	si->packet_stats_dev = result;
@@ -4727,11 +4721,14 @@ static int __init sfe_ipv6_init(void)
 	sfe_ipv6_init_complete = true;
 	return 0;
 
-exit8:
+exit9:
 	sysfs_remove_file(si->sys_sfe_ipv6_packet_stats, &sfe_ipv6_packet_stats_dev_attr.attr);
 
-exit7:
+exit8:
 	kobject_put(si->sys_sfe_ipv6_packet_stats);
+
+exit7:
+	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_stat.attr);
 
 exit6:
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level_low.attr);
@@ -4749,8 +4746,6 @@ exit2:
 	netlink_kernel_release(nl_socket);
 
 exit1:
-	if (sfe_ipv6_dent != NULL)
-		debugfs_remove_recursive(sfe_ipv6_dent);
 
 	sfe_ipv6_init_complete = false;
 	return result;
@@ -4787,6 +4782,7 @@ static void __exit sfe_ipv6_exit(void)
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_dev_attr.attr);
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level.attr);
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level_low.attr);
+	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_stat.attr);
 
 	kobject_put(si->sys_sfe_ipv6);
 	if (ipc_sfe_log_ctxt != NULL)
@@ -4794,9 +4790,6 @@ static void __exit sfe_ipv6_exit(void)
 
 	if (ipc_sfe_log_ctxt_low != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
-
-	if (sfe_ipv6_dent != NULL)
-		debugfs_remove_recursive(sfe_ipv6_dent);
 
 	sfe_ipv6_init_complete = false;
 
