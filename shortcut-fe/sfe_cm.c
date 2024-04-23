@@ -133,7 +133,6 @@ extern void (*delete_sfe_entry)(struct nf_conn *ct);
  * Expose what should be a static flag in the TCP connection tracker.
  */
 extern int nf_ct_tcp_no_window_check;
-uint32_t gPID;
 
 /*
  * sfe_cm_incr_exceptions()
@@ -329,7 +328,7 @@ static bool sfe_cm_find_dev_and_mac_addr(sfe_ip_addr_t *addr,
 
 		dst = (struct dst_entry *)rt;
 	} else {
-		rt6 = rt6_lookup(&init_net, (struct in6_addr *)addr->ip6, 0, 0, 0);
+		rt6 = rt6_lookup(&init_net, (struct in6_addr *)addr->ip6, 0, 0, 0, 0);
 		if (!rt6) {
 			goto ret_fail;
 		}
@@ -1306,6 +1305,7 @@ static void __exit sfe_cm_exit(void)
 	sfe_ipv6_destroy_all_rules_for_dev(NULL);
 
 #ifdef ISKERNEL4_14
+
 	nf_unregister_net_hooks(&init_net,
 		sfe_cm_ops_post_routing, ARRAY_SIZE(sfe_cm_ops_post_routing));
 #else

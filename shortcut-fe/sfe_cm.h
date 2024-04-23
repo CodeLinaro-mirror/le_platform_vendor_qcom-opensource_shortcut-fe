@@ -238,18 +238,17 @@ static void sfe_l2tp_find_parent_dev
 static int sfe_tcpdump_enable = 1;
 static inline int sfe_tcpdump_log(struct sk_buff *skb, struct packet_type *pt_prev)
 {
+	int ret = 1;
 	struct net_device *dev;
 
 	dev = skb->dev;
-	int ret = true;
-
 	if (pt_prev) {
 #ifdef ISKERNEL4_14
 		refcount_inc(&skb->users);
 #else
-		atomic_inc(&skb->users);
+		atomic_inc((atomic_t *)&skb->users);
 #endif
-		ret = pt_prev->func(skb, skb->dev, pt_prev, dev);
+	        ret = pt_prev->func(skb, skb->dev, pt_prev, dev);
 	}
 	return ret;
 }
