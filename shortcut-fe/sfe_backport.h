@@ -16,7 +16,7 @@
  */
 
 #include <linux/version.h>
-
+#define ISKERNELUPGRADED 1
 #ifdef ISKERNELUPGRADED
 #define sfe_cm_ipv4_post_routing_hook(PRIV, SKB, STATE) \
 static unsigned int __sfe_cm_ipv4_post_routing_hook(void *PRIV, \

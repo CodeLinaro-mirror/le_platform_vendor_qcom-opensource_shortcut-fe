@@ -716,9 +716,10 @@ static ssize_t sfe_ipv6_debug_level_low_store(struct device *dev,
 				return -EFAULT;
 			}
 		} else {
-			if (ipc_sfe_log_ctxt_low)
+			if (ipc_sfe_log_ctxt_low){
 				ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
 				ipc_sfe_log_ctxt_low = NULL;
+			}
 		}
 	}
 	sfe_v6_enable_ipc_low = tmp;
@@ -833,8 +834,6 @@ static void sfe_ipv6_remove_packet_stats_connection(struct sfe_ipv6_addr * clien
 {
 	struct sfe_ipv6 *si = &__si6;
 	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 	key = ht_conn_hash((unsigned long *) client_addr);
 
@@ -866,8 +865,6 @@ static void sfe_ipv6_remove_packet_stats_connection(struct sfe_ipv6_addr * clien
 static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct sfe_ipv6_packet_stats_list* node)
 {
 	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash((unsigned long *)
@@ -897,8 +894,6 @@ static void sfe_ipv6_insert_packet_stats_connection(struct sfe_ipv6 *si, struct 
 static bool sfe_ipv6_update_packet_stats_connection(struct sfe_ipv6* sic,struct sfe_ipv6_addr * client_addr, uint64_t rx_bytes, uint64_t tx_bytes )
 {
 	struct sfe_ipv6_packet_stats_list* curr;
-	int bkt;
-	struct hlist_node *tmp;
 	u32 key;
 
 	key = ht_conn_hash((unsigned long *)client_addr);
@@ -2190,9 +2185,7 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	__be16 dest_port;
 	struct sfe_ipv6_connection_match *cm;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int ret = 0;
 	unsigned int skb_trim_len, trim_len = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
@@ -2415,13 +2408,13 @@ static int sfe_ipv6_recv_udp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 					xmit_dev->hard_header_len)
 					ret = pskb_expand_head(skb, ETH_HLEN, 0,
 							GFP_ATOMIC);
-					if (ret) {
-						kfree_skb(skb);
-						IPC_DEBUG_LOW(
-							"pskb_expand_head failed = %d",
-							ret);
-						return 0;
-					}
+				if (ret) {
+					kfree_skb(skb);
+					IPC_DEBUG_LOW(
+						"pskb_expand_head failed = %d",
+						ret);
+					return 0;
+				}
 
 				eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IPV6);
@@ -2564,12 +2557,9 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 	struct sfe_ipv6_connection_match *counter_cm;
 	uint32_t flags;
 	struct net_device *xmit_dev;
-	struct sk_buff *new_skb ;
-	const struct net_device_ops *ops;
-	int queue_index = 0, ret = 0;
+	int  ret = 0;
 	struct sfe_ipv6_eth_hdr *eth;
 	struct sfe_ipv6_connection *c;
-	uint32_t data_offs;
 	unsigned int trim_len = 0;
 
 	/*
@@ -2981,13 +2971,13 @@ static int sfe_ipv6_recv_tcp(struct sfe_ipv6 *si, struct sk_buff *skb, struct ne
 					xmit_dev->hard_header_len)
 					ret = pskb_expand_head(skb, ETH_HLEN, 0,
 							GFP_ATOMIC);
-					if (ret) {
-						kfree_skb(skb);
-						IPC_DEBUG_LOW(
-							"pskb_expand_head failed = %d",
-							ret);
-						return 0;
-					}
+				if (ret) {
+					kfree_skb(skb);
+					IPC_DEBUG_LOW(
+						"pskb_expand_head failed = %d",
+						ret);
+					return 0;
+				}
 
 				eth = (struct sfe_ipv6_eth_hdr *)__skb_push(skb, ETH_HLEN);
 				eth->h_proto = htons(ETH_P_IPV6);
@@ -4050,9 +4040,9 @@ another_round:
 /*
  * sfe_ipv6_periodic_sync()
  */
-static void sfe_ipv6_periodic_sync(unsigned long arg)
+static void sfe_ipv6_periodic_sync(struct timer_list *list_arg)
 {
-	struct sfe_ipv6 *si = (struct sfe_ipv6 *)arg;
+	struct sfe_ipv6 *si = from_timer(si,list_arg,timer);
 	uint64_t now_jiffies;
 	int quota;
 	sfe_sync_rule_callback_t sync_rule_callback;
@@ -4145,7 +4135,7 @@ static void sfe_ipv6_periodic_sync(unsigned long arg)
 done:
 	mod_timer(&si->timer, jiffies + ((HZ + 99) / 100));
 }
-
+#ifndef CONFIG_DEBUG_FS
 /*
  * sfe_ipv6_debug_dev_read_start()
  *	Generate part of the XML output.
@@ -4189,7 +4179,7 @@ static bool sfe_ipv6_debug_dev_read_connections_start(struct sfe_ipv6 *si, char 
 	ws->state++;
 	return true;
 }
-
+#endif
 /*
  * sfe_ipv6_debug_dev_read_connections_connection()
  *	Generate part of the XML output.
@@ -4609,7 +4599,6 @@ static bool sfe_ipv6_debug_dev_read_stats
 	struct sfe_ipv6_debug_xml_write_state *ws
 )
 {
-	int bytes_read;
 	unsigned int num_connections;
 	uint64_t packets_forwarded;
 	uint64_t packets_not_forwarded;
@@ -4757,7 +4746,7 @@ static bool sfe_ipv6_debug_dev_read_end
  * our XML output state machine.
  */
 static sfe_ipv6_debug_xml_write_method_t sfe_ipv6_debug_xml_write_methods[SFE_IPV6_DEBUG_XML_STATE_DONE] = {
-#ifdef CONFIG_DEBUG_FS
+#ifdef CONFIG_DEBUG_FS	
 	sfe_ipv6_debug_dev_read_connections_connection,
 	sfe_ipv6_debug_dev_read_exceptions_exception,
 	sfe_ipv6_debug_dev_read_stats,
@@ -4883,6 +4872,7 @@ static int sfe_ipv6_debug_dev_open(struct inode *inode, struct file *file)
 }
 #endif
 
+#ifndef CONFIG_DEBUG_FS
 /*
  * sfe_ipv6_debug_dev_release()
  */
@@ -4900,7 +4890,7 @@ static int sfe_ipv6_debug_dev_release(struct inode *inode, struct file *file)
 
 	return 0;
 }
-
+#endif
 /*
  * File operations used in the debug char device
  */
@@ -4966,14 +4956,6 @@ static ssize_t write_to_v6_iface_proc_entry(struct file *file,const char *buf,si
 	return count;
 }
 
-
-static struct file_operations ipv6_iface_proc_fops = {
-	.owner = THIS_MODULE,
-	.read = read_from_v6_iface_proc_entry,
-	.write = write_to_v6_iface_proc_entry,
-};
-
-
 #ifdef CONFIG_NF_FLOW_COOKIE
 /*
  * sfe_ipv6_register_flow_cookie_cb
@@ -5011,6 +4993,12 @@ int sfe_ipv6_unregister_flow_cookie_cb(sfe_ipv6_flow_cookie_set_func_t cb)
 	return 0;
 }
 #endif /*CONFIG_NF_FLOW_COOKIE*/
+
+static struct file_operations ipv6_iface_proc_fops = {
+.owner = THIS_MODULE,
+.read = read_from_v6_iface_proc_entry,
+.write = write_to_v6_iface_proc_entry,
+};
 
 /*
  * sfe_ipv6_init()
@@ -5171,14 +5159,18 @@ static int __init sfe_ipv6_init(void)
 	//create Hash table
 	hash_init(si->packet_stats_htable);
 
-	proc_create("ipv6_iface_name",0,NULL,&ipv6_iface_proc_fops);
+	proc_create("ipv6_iface_name",0,NULL,(struct proc_ops *)&ipv6_iface_proc_fops);
 	memset(si->ipv6_iface,0,MAX_INTF_LEN);
 	si->iface_length=strlen(si->ipv6_iface);
 
 	/*
 	 * Create a timer to handle periodic statistics.
 	 */
+	#ifdef ISKERNEL6_1
+	timer_setup(&si->timer, sfe_ipv6_periodic_sync, 0);
+	#else
 	setup_timer(&si->timer, sfe_ipv6_periodic_sync, (unsigned long)si);
+	#endif
 	mod_timer(&si->timer, jiffies + ((HZ + 99) / 100));
 
 	spin_lock_init(&si->lock);
