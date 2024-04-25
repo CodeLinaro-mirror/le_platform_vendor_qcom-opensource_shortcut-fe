@@ -725,7 +725,7 @@ static inline int sfe_ipv6_addr_equal(struct sfe_ipv6_addr *a,
 #define NL_MESSAGE_TYPE PACKET_STATS_MSG
 #define NL_MAX_BUF 1024
 #define NL_UNICAST_GRP 0
-#define NL_IPV6_PROTO_ID 25
+#define NL_IPV6_PROTO_ID 20
 #define SFE_IPV6_RESET_PACKET_STATS_COUNTERS 0xAA
 #define SFE_IPV6_DELETE_PACKET_STATS_NODE 0xAB
 struct sock *nl_socket = NULL;
@@ -4591,7 +4591,7 @@ static int __init sfe_ipv6_init(void)
 
 	if (!nl_socket)
 	{
-		DEBUG_ERROR("Error creating SFE IPV6 NL socket");
+		DEBUG_ERROR("Error creating SFE IPV6 NL socket, Exiting with PROTO ID: %d\n", NL_IPV6_PROTO_ID);
 		goto exit1;
 	}
 
