@@ -725,10 +725,10 @@ static inline int sfe_ipv6_addr_equal(struct sfe_ipv6_addr *a,
 #define NL_MESSAGE_TYPE PACKET_STATS_MSG
 #define NL_MAX_BUF 1024
 #define NL_UNICAST_GRP 0
-#define NL_IPV6_PROTO_ID 25
 #define SFE_IPV6_RESET_PACKET_STATS_COUNTERS 0xAA
 #define SFE_IPV6_DELETE_PACKET_STATS_NODE 0xAB
 struct sock *nl_socket = NULL;
+uint32_t NL_IPV6_PROTO_ID = 16;
 uint32_t gPID = 0;
 struct sfe_ipv6_packet_stats_node
 {
@@ -4587,14 +4587,17 @@ static int __init sfe_ipv6_init(void)
 
 	DEBUG_INFO("SFE IPv6 init\n");
 
-	nl_socket = netlink_kernel_create(&init_net, NL_IPV6_PROTO_ID, &nl_ipv6_cfg);
-
-	if (!nl_socket)
-	{
-		DEBUG_ERROR("Error creating SFE IPV6 NL socket");
+	for (NL_IPV6_PROTO_ID = 16 ; NL_IPV6_PROTO_ID  <= 31 ; NL_IPV6_PROTO_ID++) {
+		nl_socket = netlink_kernel_create(&init_net, NL_IPV6_PROTO_ID, &nl_ipv6_cfg);
+		if (nl_socket) {
+			pr_info("SFE IPV6 NL Proto ID : %d\n", NL_IPV6_PROTO_ID);
+			break;
+		}
+	}
+	if (!nl_socket) {
+		pr_err("Error creating SFE IPV6 NL socket");
 		goto exit1;
 	}
-
 	/*
 	 * Create sys/sfe_ipv6
 	 */
