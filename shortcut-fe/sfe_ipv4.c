@@ -355,9 +355,6 @@ struct sfe_ipv4_connection {
 	bool use_destMac;		/*Add ethernet header if set*/
 };
 
-/*Parameters for debugfs*/
-struct dentry *sfe_ipv4_dent;
-struct dentry *sfe_ipv4_entry;
 #define MAX_PROC_SIZE 10
 #define MAX_BUFF_SIZE 1024
 char temp_buff[MAX_BUFF_SIZE];
@@ -4399,14 +4396,14 @@ sfe_ipv4_debug_xml_write_method_t sfe_ipv4_debug_xml_write_methods[SFE_IPV4_DEBU
 };
 
 /*
- * sfe_ipv4_debug_dev_read()
- *	Send info to userspace upon read request from user
+ * sfe_ipv4_debug_stat_show
+ * Send info to userspace upon read request from user
  */
-static ssize_t sfe_ipv4_debug_dev_read(struct file *filp, char *buffer, size_t length, loff_t *offset)
+static ssize_t sfe_ipv4_debug_stat_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
 {
 	struct sfe_ipv4_debug_xml_write_state *ws;
 	int total_read = SFE_DEBUGFS_READ_LEN, len = 0;
-	ssize_t ret_cnt = 0;
 	struct sfe_ipv4 *si = &__si;
 	char *buff;
 
@@ -4435,18 +4432,20 @@ static ssize_t sfe_ipv4_debug_dev_read(struct file *filp, char *buffer, size_t l
 	if (len > total_read)
 		len = total_read;
 
-	ret_cnt = simple_read_from_buffer(buffer, length, offset, buff, len);
+	memcpy(buf, buff, len);
 	kfree(buff);
 	kfree(ws);
 
-	return ret_cnt;
+	return len;
 }
 
 /*
- * sfe_ipv4_debug_dev_write()
- *	Write to char device resets some stats
+ * sfe_ipv4_debug_stat_store
+ * Write to char device resets some stats
  */
-static ssize_t sfe_ipv4_debug_dev_write(struct file *filp, const char *buffer, size_t length, loff_t *offset)
+static ssize_t sfe_ipv4_debug_stat_store(struct device *dev,
+			struct device_attribute *attr, const char *buf,
+			size_t count)
 {
 	struct sfe_ipv4 *si = &__si;
 #ifdef ISKERNEL5_15
@@ -4455,9 +4454,9 @@ static ssize_t sfe_ipv4_debug_dev_write(struct file *filp, const char *buffer, s
 	bool write_ops = 0;
 #endif
 	memset(temp_buff, 0, sizeof(temp_buff));
-	if (length > MAX_PROC_SIZE)
-		length = MAX_PROC_SIZE;
-	if (copy_from_user(temp_buff, buffer, length))
+	if (count > MAX_PROC_SIZE)
+		count = MAX_PROC_SIZE;
+	if (copy_from_user(temp_buff, buf, count))
 		return -EFAULT;
 #ifdef ISKERNEL5_15
 	if (sscanf(temp_buff, "%d", &write_ops) < 0) {
@@ -4488,19 +4487,15 @@ static ssize_t sfe_ipv4_debug_dev_write(struct file *filp, const char *buffer, s
 	}
 
 write_done:
-	return length;
+	return count;
 }
 
 /*
- * File operations used in the debug char device
+ * sysfs attributes.
  */
-static struct file_operations sfe_ipv4_debug_dev_fops = {
-	.read = sfe_ipv4_debug_dev_read,
-	.write = sfe_ipv4_debug_dev_write,
-	.open = simple_open,
-	.owner = THIS_MODULE,
-	.llseek = default_llseek,
-};
+static const struct device_attribute sfe_ipv4_debug_stat =
+__ATTR(sfe_ipv4_debug, SFE_DEBUGFS_RW_PERM,
+	sfe_ipv4_debug_stat_show, sfe_ipv4_debug_stat_store);
 
 static ssize_t read_from_v4_iface_proc_entry(struct file *filp,char *buf,size_t count,loff_t *offp )
 {
@@ -4612,8 +4607,6 @@ static int __init sfe_ipv4_init(void)
 
 	DEBUG_INFO("SFE IPv4 init\n");
 
-	/*register debugfs*/
-	sfe_ipv4_dent = debugfs_create_dir("sfe_ipv4", NULL);
 	/*register proc sys*/
 	si->proc.sfe_debug_ctl_path[0].procname = "debug";
 	si->proc.debug_root[0].procname = "sfe";
@@ -4669,14 +4662,13 @@ static int __init sfe_ipv4_init(void)
 	}
 
 	/*
-	 * Register our debug char device.
+	 * Create sys/sfe_ipv4/sfe_ipv4_debug
 	 */
-	sfe_ipv4_entry = debugfs_create_file(
-			"sfe_ipv4_debug", (SFE_DEBUGFS_RW_PERM),
-				sfe_ipv4_dent, 0, &sfe_ipv4_debug_dev_fops);
-	if (IS_ERR_OR_NULL(sfe_ipv4_entry)) {
-		DEBUG_ERROR("Failed to register debugfs\n");
-		result = -EFAULT;
+	result = sysfs_create_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_stat.attr);
+	if (result) {
+		DEBUG_ERROR(
+			"failed to create sfe_ipv4_debug file: %d for ipv4 connection\n",
+			result);
 		goto exit6;
 	}
 
@@ -4688,7 +4680,7 @@ static int __init sfe_ipv4_init(void)
 	si->sys_sfe_ipv4_packet_stats = kobject_create_and_add("sfe_packet_stats_ipv4", NULL);
 	if (!si->sys_sfe_ipv4_packet_stats) {
 		DEBUG_ERROR("failed to register sfe_packet_stats_ipv4\n");
-		goto exit6;
+		goto exit7;
 	}
 
 	/*
@@ -4697,7 +4689,7 @@ static int __init sfe_ipv4_init(void)
 	result = sysfs_create_file(si->sys_sfe_ipv4_packet_stats, &sfe_ipv4_packet_stats_dev_attr.attr);
 	if (result) {
 		DEBUG_ERROR("failed to register ipv4 packet stat dev file: %d\n", result);
-		goto exit7;
+		goto exit8;
 	}
 
 	/*
@@ -4706,7 +4698,7 @@ static int __init sfe_ipv4_init(void)
 	result = register_chrdev(0, "sfe_packet_stats_ipv4", &sfe_ipv4_packet_stats_fops);
 	if (result < 0) {
 		DEBUG_ERROR("Failed to register ipv4 packet stats chrdev: %d\n", result);
-		goto exit8;
+		goto exit9;
 	}
 
 	si->packet_stats_dev = result;
@@ -4736,11 +4728,14 @@ static int __init sfe_ipv4_init(void)
 	sfe_ipv4_init_complete = true;
 	return 0;
 
-exit8:
+exit9:
 	sysfs_remove_file(si->sys_sfe_ipv4_packet_stats, &sfe_ipv4_packet_stats_dev_attr.attr);
 
-exit7:
+exit8:
 	kobject_put(si->sys_sfe_ipv4_packet_stats);
+
+exit7:
+	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_stat.attr);
 
 exit6:
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_debug_level_low.attr);
@@ -4758,8 +4753,6 @@ exit2:
 	netlink_kernel_release(nl_socket);
 
 exit1:
-	if (sfe_ipv4_dent != NULL)
-		debugfs_remove_recursive(sfe_ipv4_dent);
 
 	sfe_ipv4_init_complete = false;
 	return result;
@@ -4796,6 +4789,7 @@ static void __exit sfe_ipv4_exit(void)
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_dev_attr.attr);
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_debug_level.attr);
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_debug_level_low.attr);
+	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_ipv4_debug_stat.attr);
 
 	kobject_put(si->sys_sfe_ipv4);
 	if (ipc_sfe_log_ctxt != NULL)
@@ -4803,9 +4797,6 @@ static void __exit sfe_ipv4_exit(void)
 
 	if (ipc_sfe_log_ctxt_low != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
-
-	if (sfe_ipv4_dent != NULL)
-		debugfs_remove_recursive(sfe_ipv4_dent);
 
 	sfe_ipv4_init_complete = false;
 
