@@ -74,13 +74,14 @@ static int sfe_read_len_handler(struct ctl_table *table, int write, void __user 
 {   int ret;
     ret = proc_dointvec(table, write, buffer, lenp, ppos);
     if (var_debugfs_read_len > SFE_DEBUGFS_READ_LEN_MAX){
-	pr_warn("Alert:Exceeding MAX allowed value, defaulting to max %d \n", SFE_DEBUGFS_READ_LEN_MAX);
+	pr_warn("Alert: MAX allowed value is %d, defaulting to max %d \n", SFE_DEBUGFS_READ_LEN_MAX);
 	var_debugfs_read_len = SFE_DEBUGFS_READ_LEN_MAX;
     }
-    else if (var_debugfs_read_len < SFE_DEBUGFS_READ_LEN){
-	pr_warn("Alert:Below MIN allowed value , defaulting to min %d \n", SFE_DEBUGFS_READ_LEN);
+    if (var_debugfs_read_len < SFE_DEBUGFS_READ_LEN){
+	pr_warn("Alert: MIN allowed value is %d, defaulting to min %d \n", SFE_DEBUGFS_READ_LEN);
 	var_debugfs_read_len = SFE_DEBUGFS_READ_LEN;
     }
+
     return ret;
 }
 
