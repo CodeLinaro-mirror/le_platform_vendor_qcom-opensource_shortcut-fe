@@ -74,14 +74,13 @@ static int sfe_read_len_handler(struct ctl_table *table, int write, void __user 
 {   int ret;
     ret = proc_dointvec(table, write, buffer, lenp, ppos);
     if (var_debugfs_read_len > SFE_DEBUGFS_READ_LEN_MAX){
-	pr_warn("Alert: MAX allowed value is %d, defaulting to max %d \n", SFE_DEBUGFS_READ_LEN_MAX);
+	pr_warn("Alert:Exceeding MAX allowed value, defaulting to max %d \n", SFE_DEBUGFS_READ_LEN_MAX);
 	var_debugfs_read_len = SFE_DEBUGFS_READ_LEN_MAX;
     }
-    if (var_debugfs_read_len < SFE_DEBUGFS_READ_LEN){
-	pr_warn("Alert: MIN allowed value is %d, defaulting to min %d \n", SFE_DEBUGFS_READ_LEN);
+    else if (var_debugfs_read_len < SFE_DEBUGFS_READ_LEN){
+	pr_warn("Alert:Below MIN allowed value , defaulting to min %d \n", SFE_DEBUGFS_READ_LEN);
 	var_debugfs_read_len = SFE_DEBUGFS_READ_LEN;
     }
-
     return ret;
 }
 
@@ -610,7 +609,7 @@ static inline void sfe_ipv4_connection_match_update_summary_stats(struct sfe_ipv
 #define NL_MESSAGE_TYPE PACKET_STATS_MSG
 #define NL_MAX_BUF 1024
 #define NL_UNICAST_GRP 0
-#define NL_PROTO_ID 26
+#define NL_PROTO_ID 18
 #define SFE_IPV4_RESET_PACKET_STATS_COUNTERS 0xAC
 #define SFE_IPV4_DELETE_PACKET_STATS_NODE 0xAD
 struct sock *nl_socket = NULL;
@@ -4574,7 +4573,7 @@ static int __init sfe_ipv4_init(void)
 	nl_socket = netlink_kernel_create(&init_net, NL_PROTO_ID, &nl_ipv4_cfg);
 	if (!nl_socket)
 	{
-		DEBUG_ERROR("Error creating SFE IPV4 NL socket");
+		DEBUG_ERROR("Error creating SFE IPV4 NL socket, Exiting with PROTO ID: %d\n", NL_PROTO_ID);
 		goto exit1;
 	}
 
