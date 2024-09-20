@@ -440,7 +440,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * Don't process packets that are not being forwarded.
 	 */
 	in = dev_get_by_index(&init_net, skb->skb_iif);
-	if (!in) {
+	if (!in || in->pcpu_refcnt == NULL) {
 		sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_IIF);
 		DEBUG_TRACE("packet not forwarding\n");
 		return NF_ACCEPT;
