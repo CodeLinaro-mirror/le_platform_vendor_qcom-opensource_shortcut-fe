@@ -4583,8 +4583,13 @@ static int __init sfe_ipv6_init(void)
 	si->proc1.debug_root[0].procname = "sfe_v6";
 	si->proc1.debug_root[0].mode = 0555;
 	si->proc1.debug_root[0].child = sfe_sysctl_debug;
+#ifdef ISKERNEL6_6
+	const char *path = "debug_v6";
+	size_t table_size = sizeof(si->proc1.debug_root) / sizeof(si->proc1.debug_root[0]);
+	si->proc1.debug_ctl_header = register_sysctl_sz(path, si->proc1.debug_root, table_size);
+else
 	si->proc1.debug_ctl_header = register_sysctl_paths(si->proc1.sfe_debug_ctl_path, si->proc1.debug_root);
-
+#endif
 	DEBUG_INFO("SFE IPv6 init\n");
 
 	for (NL_IPV6_PROTO_ID = 16 ; NL_IPV6_PROTO_ID  <= 31 ; NL_IPV6_PROTO_ID++) {
