@@ -665,7 +665,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	 * the case then we need to hunt down the underlying interface.
 	 */
 	if (src_dev->priv_flags & IFF_EBRIDGE) {
-		src_br_dev = br_fdb_find_port(src_dev,sic.src_mac, 0);
+		src_br_dev = br_port_dev_get(src_dev, sic.src_mac);
 		if (!src_br_dev) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_BRIDGE);
 			DEBUG_TRACE("no port found on bridge\n");
@@ -675,7 +675,7 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 	}
 
 	if (dest_dev->priv_flags & IFF_EBRIDGE) {
-		dest_br_dev = br_fdb_find_port(dest_dev,sic.dest_mac_xlate, 0);
+		dest_br_dev = br_port_dev_get(dest_dev, sic.dest_mac_xlate);
 		if (!dest_br_dev) {
 			sfe_cm_incr_exceptions(SFE_CM_EXCEPTION_NO_BRIDGE);
 			DEBUG_TRACE("no port found on bridge\n");
