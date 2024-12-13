@@ -1,0 +1,18 @@
+package(
+    default_visibility = [
+        "//visibility:public",
+    ],
+)
+
+load("//build/kernel/kleaf:kernel.bzl", "ddk_headers")
+
+ddk_headers(
+    name = "sfe_src_headers",
+    hdrs = glob([
+        "sfe*.h",
+    ])
+)
+
+load(":build/define_modules.bzl", "define_modules")
+
+define_modules()
