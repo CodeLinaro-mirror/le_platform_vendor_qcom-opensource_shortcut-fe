@@ -4564,17 +4564,17 @@ static int __init sfe_ipv4_init(void)
 	/*register debugfs*/
 	sfe_ipv4_dent = debugfs_create_dir("sfe_ipv4", NULL);
 	/*register proc sys*/
-	si->proc.sfe_debug_ctl_path[0].procname = "debug";
-	si->proc.debug_root[0].procname = "sfe";
-	si->proc.debug_root[0].mode = 0555;
-	si->proc.debug_root[0].child = sfe_sysctl_debug;
 #ifdef ISKERNEL6_6
-	const char *path = "debug";
-	size_t table_size = sizeof(si->proc.debug_root) / sizeof(si->proc.debug_root[0]);
-	si->proc.debug_ctl_header = register_sysctl_sz(path, si->proc.debug_root, table_size);
+        const char *path = "debug/sfe";
+        si->proc.debug_ctl_header = register_sysctl_sz(path, sfe_sysctl_debug, sizeof(sfe_sysctl_debug));
 #else
-	si->proc.debug_ctl_header = register_sysctl_paths(si->proc.sfe_debug_ctl_path, si->proc.debug_root);
+        si->proc.sfe_debug_ctl_path[0].procname = "debug";
+        si->proc.debug_root[0].procname = "sfe";
+        si->proc.debug_root[0].mode = 0555;
+        si->proc.debug_root[0].child = sfe_sysctl_debug;
+        si->proc.debug_ctl_header = register_sysctl_paths(si->proc.sfe_debug_ctl_path, si->proc.debug_root);
 #endif
+
 	for (NL_PROTO_ID = 16 ; NL_PROTO_ID <= 31 ; NL_PROTO_ID++) {
 		nl_socket = netlink_kernel_create(&init_net, NL_PROTO_ID, &nl_ipv4_cfg);
 		if (nl_socket) {
