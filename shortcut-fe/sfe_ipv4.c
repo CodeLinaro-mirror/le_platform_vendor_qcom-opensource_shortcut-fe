@@ -5117,7 +5117,7 @@ static int __init sfe_ipv4_init(void)
 	 * Create a timer to handle periodic statistics.
 	 */
 	#ifdef ISKERNEL6_1
-	timer_setup(&si->timer, sfe_ipv4_periodic_sync, 0);
+	timer_setup(&si->timer, sfe_ipv4_periodic_sync, TIMER_DEFERRABLE);
 	#else
 	setup_timer(&si->timer, sfe_ipv4_periodic_sync, (unsigned long)si);
 	#endif
