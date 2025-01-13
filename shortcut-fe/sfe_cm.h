@@ -96,7 +96,7 @@ struct sfe_l2tp_session_array{
 	struct sfe_l2tp_config session[SFE_L2TP_MAX_CONF];
 };
 
-extern struct sfe_l2tp_session_array sfe_l2tp_session_arr;
+struct sfe_l2tp_session_array sfe_l2tp_session_arr;
 
 #endif
 

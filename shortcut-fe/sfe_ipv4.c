@@ -31,10 +31,6 @@
 #include "sfe.h"
 #include "sfe_cm.h"
 
-#ifdef FEATURE_L2TP_OVER_SFE
-struct sfe_l2tp_session_array sfe_l2tp_session_arr;
-#endif
-
 #define PKT_THRESHOLD 10
 #define TIMEOUT 100
 #define PACKETS_STATS_ENABLED 0
@@ -123,10 +119,10 @@ struct sfe_ipv4_eth_hdr {
  */
 struct sfe_ipv4_ip_hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8 ihl:4,
+	unsigned int ihl:4,
 	     version:4;
 #elif defined (__BIG_ENDIAN_BITFIELD)
-	__u8 version:4,
+	unsigned int version:4,
 	     ihl:4;
 #else
 #error	"Please fix <asm/byteorder.h>"
@@ -169,7 +165,7 @@ struct sfe_ipv4_tcp_hdr {
 	__be32 seq;
 	__be32 ack_seq;
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u16 res1:4,
+	unsigned int  res1:4,
 	      doff:4,
 	      fin:1,
 	      syn:1,
@@ -180,7 +176,7 @@ struct sfe_ipv4_tcp_hdr {
 	      ece:1,
 	      cwr:1;
 #elif defined(__BIG_ENDIAN_BITFIELD)
-	__u16 doff:4,
+	unsigned int doff:4,
 	      res1:4,
 	      cwr:1,
 	      ece:1,
@@ -421,7 +417,7 @@ enum sfe_ipv4_exception_events {
 	SFE_IPV4_EXCEPTION_EVENT_LAST
 };
 
-static char *sfe_ipv4_exception_events_string[SFE_IPV4_EXCEPTION_EVENT_LAST] = {
+static const char *sfe_ipv4_exception_events_string[SFE_IPV4_EXCEPTION_EVENT_LAST] = {
 	"UDP_HEADER_INCOMPLETE",
 	"UDP_NO_CONNECTION",
 	"UDP_IP_OPTIONS_OR_INITIAL_FRAGMENT",
