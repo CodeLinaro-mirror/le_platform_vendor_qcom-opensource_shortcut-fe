@@ -26,7 +26,10 @@
  * the bridge layer to do this sort of thing for us.
  */
 
+#ifdef CONFIG_SFE_IPC_DEBUG
 #include <linux/ipc_logging.h>
+#endif
+
 #ifdef FEATURE_L2TP_OVER_SFE
 #include <linux/cdev.h>
 #endif
