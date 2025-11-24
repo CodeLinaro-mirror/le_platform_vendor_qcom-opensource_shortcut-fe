@@ -63,6 +63,7 @@ ifdef CFLAGS
 	ccflags-y += -g
 endif
 CDEFINES += -D__CHECK_ENDIAN__
+#CDEFINES += -DCONFIG_SFE_IPC_DEBUG
 
 KBUILD_CPPFLAGS += $(CDEFINES)
 

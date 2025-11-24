@@ -3927,6 +3927,7 @@ static ssize_t sfe_ipv4_debug_level_low_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", sfe_v4_enable_ipc_low);
 }
 
+#ifdef CONFIG_SFE_IPC_DEBUG
 /*
  * sfe_ipv4_debug_level_low_store
  * Enable/disable sfe ipv4 low level logging
@@ -3964,6 +3965,15 @@ static ssize_t sfe_ipv4_debug_level_low_store(struct device *dev,
 	return count;
 }
 
+#else
+static ssize_t sfe_ipv4_debug_level_low_store(struct device *dev,
+                        struct device_attribute *attr, const char *buf,
+                        size_t count)
+{
+    pr_info("Low level IPC debug not supported\n");
+    return count;
+}
+#endif
 
 /*
  * sysfs attributes.
@@ -4552,13 +4562,14 @@ static int __init sfe_ipv4_init(void)
 	struct sfe_ipv4 *si = &__si;
 	int result = -1;
 
+#ifdef CONFIG_SFE_IPC_DEBUG
 	ipc_sfe_log_ctxt = ipc_log_context_create(IPCLOG_STATE_PAGES,
 							"sfe_ipv4", 0);
 	if (!ipc_sfe_log_ctxt)
 		pr_err("error creating logging context for sfe ipv4 connection\n");
 	else
 		pr_info("IPC logging has been enabled for sfe ipv4 connection\n");
-
+#endif
 	DEBUG_INFO("SFE IPv4 init\n");
 
 	/*register debugfs*/
@@ -4756,12 +4767,13 @@ static void __exit sfe_ipv4_exit(void)
 	sysfs_remove_file(si->sys_sfe_ipv4, &sfe_debug_level_low.attr);
 
 	kobject_put(si->sys_sfe_ipv4);
+#ifdef CONFIG_SFE_IPC_DE
 	if (ipc_sfe_log_ctxt != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt);
 
 	if (ipc_sfe_log_ctxt_low != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
-
+#endif
 	if (sfe_ipv4_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv4_dent);
 

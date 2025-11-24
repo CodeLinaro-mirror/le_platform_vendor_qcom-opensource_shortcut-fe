@@ -658,6 +658,7 @@ static const struct device_attribute sfe_debug_level =
 __ATTR(debug_level, 0660, sfe_ipv6_debug_level_show,
 	sfe_ipv6_debug_level_store);
 
+#ifdef CONFIG_SFE_IPC_DEBUG
 /*
  * sfe_ipv6_debug_level_low_show
  * dump the current value
@@ -667,7 +668,8 @@ static ssize_t sfe_ipv6_debug_level_low_show(struct device *dev,
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", sfe_v6_enable_ipc_low);
 }
-
+#endif
+#ifdef CONFIG_SFE_IPC_DEBUG
 /*
  * sfe_ipv6_debug_level_low_store
  * Enable/disable sfe ipv6 low level logging
@@ -702,7 +704,9 @@ static ssize_t sfe_ipv6_debug_level_low_store(struct device *dev,
 	sfe_v6_enable_ipc_low = tmp;
 	return count;
 }
+#endif
 
+#ifdef CONFIG_SFE_IPC_DEBUG
 
 /*
  * sysfs attributes.
@@ -710,7 +714,7 @@ static ssize_t sfe_ipv6_debug_level_low_store(struct device *dev,
 static const struct device_attribute sfe_debug_level_low =
 __ATTR(sfe_v6_enable_ipc_low, 0660,
 	sfe_ipv6_debug_level_low_show, sfe_ipv6_debug_level_low_store);
-
+#endif
 
 /*
  * Packet stats framework
@@ -4565,14 +4569,14 @@ static int __init sfe_ipv6_init(void)
 {
 	struct sfe_ipv6 *si = &__si6;
 	int result = -1;
-
+#ifdef CONFIG_SFE_IPC_DEBUG
 	ipc_sfe_log_ctxt = ipc_log_context_create(IPCLOG_STATE_PAGES,
 							"sfe_ipv6", 0);
 	if (!ipc_sfe_log_ctxt)
 		pr_err("error creating logging context for sfe ipv6 connection\n");
 	else
 		pr_info("IPC logging has been enabled for sfe ipv6 connection\n");
-
+#endif
 	DEBUG_INFO("SFE IPv6 init\n");
 
 	/*register debugfs*/
@@ -4634,7 +4638,9 @@ static int __init sfe_ipv6_init(void)
 	/*
 	 * Create sys/sfe_ipv4/sfe_v6_enable_ipc_low
 	 */
+#ifdef CONFIG_SFE_IPC_DEBUG
 	result = sysfs_create_file(si->sys_sfe_ipv6, &sfe_debug_level_low.attr);
+#endif
 	if (result) {
 		DEBUG_ERROR(
 			"failed debug level low file: %d for ipv6 connection\n",
@@ -4713,8 +4719,9 @@ exit7:
 	kobject_put(si->sys_sfe_ipv6_packet_stats);
 
 exit6:
+	#ifdef CONFIG_SFE_IPC_DEBUG
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level_low.attr);
-
+	#endif
 exit5:
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level.attr);
 
@@ -4765,15 +4772,17 @@ static void __exit sfe_ipv6_exit(void)
 
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_ipv6_debug_dev_attr.attr);
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level.attr);
+#ifdef CONFIG_SFE_IPC_DEBUG
 	sysfs_remove_file(si->sys_sfe_ipv6, &sfe_debug_level_low.attr);
-
+#endif
 	kobject_put(si->sys_sfe_ipv6);
+#ifdef CONFIG_SFE_IPC_DEBUG
 	if (ipc_sfe_log_ctxt != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt);
 
 	if (ipc_sfe_log_ctxt_low != NULL)
 		ipc_log_context_destroy(ipc_sfe_log_ctxt_low);
-
+#endif
 	if (sfe_ipv6_dent != NULL)
 		debugfs_remove_recursive(sfe_ipv6_dent);
 
