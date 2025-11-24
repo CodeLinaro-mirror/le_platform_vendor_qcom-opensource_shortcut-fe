@@ -59,7 +59,10 @@
  * Debug output verbosity level.
  */
 #define DEBUG_LEVEL 2
+#ifdef CONFIG_SFE_IPC_DEBUG
 static void *ipc_sfe_log_ctxt;
+#endif
+
 #ifdef ISKERNEL5_15
 	void *ipc_sfe_log_ctxt_low = NULL;
 #else
@@ -84,6 +87,8 @@ enum {
 };
 
 static int debug_level = WARN_LEVEL;
+
+#ifdef CONFIG_SFE_IPC_DEBUG
 
 #define DEBUG_ERROR(s, ...) \
 do { \
@@ -177,6 +182,18 @@ do { \
 	} \
 } while (0)
 
+#else  /* CONFIG_SFE_IPC_DEBUG not defined */
+
+#define DEBUG_ERROR(s, ...)      do {} while (0)
+#define DEBUG_WARN(s, ...)       do {} while (0)
+#define DEBUG_INFO(s, ...)       do {} while (0)
+#define DEBUG_TRACE(s, ...)      do {} while (0)
+#define IPC_DEBUG(s, ...)        do {} while (0)
+#define DEBUG_INFO_LOW(s, ...)   do {} while (0)
+#define DEBUG_TRACE_LOW(s, ...)  do {} while (0)
+#define IPC_DEBUG_LOW(s, ...)    do {} while (0)
+
+#endif /* CONFIG_SFE_IPC_DEBUG */
 
 #ifdef CONFIG_NF_FLOW_COOKIE
 typedef int (*flow_cookie_set_func_t)(u32 protocol, __be32 src_ip, __be16 src_port,
