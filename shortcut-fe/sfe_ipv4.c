@@ -947,7 +947,8 @@ static bool sfe_ipv4_packet_stats_read_connections_connection(struct sfe_ipv4 *s
 		return true;
 	}
 
-	if (strncmp(c->original_dev->name, si->ipv4_iface, strlen(si->ipv4_iface) - 1) == 0)
+	if (si->iface_length > 0 &&
+		strncmp(c->original_dev->name, si->ipv4_iface, si->iface_length) == 0)
 	{
 		src_dev_valid_for_pack_stats = true;
 		if (c->dest_ip != c->dest_ip_xlate)
@@ -959,7 +960,8 @@ static bool sfe_ipv4_packet_stats_read_connections_connection(struct sfe_ipv4 *s
 			client_ip = c->dest_ip;
 		}
 	}
-	else if (strncmp(c->reply_dev->name, si->ipv4_iface, strlen(si->ipv4_iface) - 1) == 0)
+	else if (si->iface_length > 0 &&
+		strncmp(c->reply_dev->name, si->ipv4_iface, si->iface_length) == 0)
 	{
 		dest_dev_valid_for_pack_stats = true;
 		client_ip = c->src_ip;
@@ -1815,7 +1817,8 @@ static void sfe_ipv4_remove_sfe_ipv4_connection(struct sfe_ipv4 *si, struct sfe_
 		/*we need to update pack stat list before destroying
 		  we can use connection c whihc we are abt to destroy to update
 		  packet stat list*/
-		if (strncmp(c->original_dev->name, si->ipv4_iface, strlen(si->ipv4_iface) - 1) == 0)
+		if (si->iface_length > 0 &&
+			strncmp(c->original_dev->name, si->ipv4_iface, si->iface_length) == 0)
 		{
 			if (c->dest_ip != c->dest_ip_xlate)
 			{
@@ -1835,7 +1838,8 @@ static void sfe_ipv4_remove_sfe_ipv4_connection(struct sfe_ipv4 *si, struct sfe_
 			rx_bytes = c->original_match->rx_pack_stat_byte_count;
 			c->original_match->rx_pack_stat_byte_count = 0;
 		}
-		else if (strncmp(c->reply_dev->name, si->ipv4_iface, strlen(si->ipv4_iface) - 1) == 0)
+		else if (si->iface_length > 0 &&
+			strncmp(c->reply_dev->name, si->ipv4_iface, si->iface_length) == 0)
 		{
 			client_ip = c->src_ip;
 			IPC_DEBUG(
@@ -2129,8 +2133,9 @@ static int sfe_ipv4_recv_udp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 * we allow if the iface is rmnet_data, else don't allow
 	 */
 	if (unlikely(len > cm->xmit_dev_mtu)) {
-		if ((strncmp(cm->xmit_dev->name, si->ipv4_iface,
-						strlen(si->ipv4_iface) - 1) != 0) ||
+		if ((si->iface_length == 0 ||
+				strncmp(cm->xmit_dev->name, si->ipv4_iface,
+						si->iface_length) != 0) ||
 				!skip_mtu_check) {
 			struct sfe_ipv4_connection *c = cm->connection;
 			sfe_ipv4_remove_sfe_ipv4_connection(si, c);
@@ -2590,8 +2595,9 @@ static int sfe_ipv4_recv_tcp(struct sfe_ipv4 *si, struct sk_buff *skb, struct ne
 	 * we allow if the iface is rmnet_data, else don't allow
 	 */
 	if (unlikely((len > cm->xmit_dev_mtu) && !skb_is_gso(skb))) {
-		if ((strncmp(cm->xmit_dev->name, si->ipv4_iface,
-						strlen(si->ipv4_iface) - 1) != 0) ||
+		if ((si->iface_length == 0 ||
+				strncmp(cm->xmit_dev->name, si->ipv4_iface,
+						si->iface_length) != 0) ||
 				!skip_mtu_check) {
 			struct sfe_ipv4_connection *c = cm->connection;
 			sfe_ipv4_remove_sfe_ipv4_connection(si, c);
@@ -3668,13 +3674,15 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	c->debug_read_seq = 0;
 	c->last_sync_jiffies = get_jiffies_64();
 
-	if (strncmp(dest_dev->name, si->ipv4_iface, strlen(si->ipv4_iface) - 1)== 0) {
+	if (si->iface_length > 0 &&
+		strncmp(dest_dev->name, si->ipv4_iface, si->iface_length) == 0) {
 		c->use_destMac = false;
 		original_cm->addEthMAC = false;
 		reply_cm->addEthMAC = true;
 		dest_dev_valid_for_pack_stats = true;
 	}
-	else if (strncmp(src_dev->name, si->ipv4_iface, strlen(si->ipv4_iface) - 1)== 0) {
+	else if (si->iface_length > 0 &&
+		strncmp(src_dev->name, si->ipv4_iface, si->iface_length) == 0) {
 		c->use_destMac = false;
 		reply_cm->addEthMAC = false;
 		original_cm->addEthMAC = true;
