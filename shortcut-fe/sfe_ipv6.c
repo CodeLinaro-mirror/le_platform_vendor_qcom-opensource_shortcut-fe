@@ -1089,7 +1089,8 @@ static bool sfe_ipv6_packet_stats_read_connections_connection(struct sfe_ipv6 *s
 		return true;
 	}
 
-	if (strncmp(c->original_dev->name, si->ipv6_iface, strlen(si->ipv6_iface) - 1) == 0)
+	if (si->iface_length > 0 &&
+		strncmp(c->original_dev->name, si->ipv6_iface, si->iface_length) == 0)
 	{
 		src_dev_valid_for_pack_stats = true;
 		if (!sfe_ipv6_addr_equal(c->dest_ip, c->dest_ip_xlate))
@@ -1101,7 +1102,8 @@ static bool sfe_ipv6_packet_stats_read_connections_connection(struct sfe_ipv6 *s
 			client_ip = c->dest_ip[0];
 		}
 	}
-	else if (strncmp(c->reply_dev->name, si->ipv6_iface, strlen(si->ipv6_iface) - 1) == 0)
+	else if (si->iface_length > 0 &&
+		strncmp(c->reply_dev->name, si->ipv6_iface, si->iface_length) == 0)
 	{
 		dest_dev_valid_for_pack_stats = true;
 		client_ip = c->src_ip[0];
@@ -1967,7 +1969,8 @@ static void sfe_ipv6_remove_connection(struct sfe_ipv6 *si, struct sfe_ipv6_conn
 		/*we need to update pack stat list before destroying
 		  we can use connection c whihc we are abt to destroy to update
 		  packet stat list*/
-		if (strncmp(c->original_dev->name, si->ipv6_iface, strlen(si->ipv6_iface) - 1) == 0)
+		if (si->iface_length > 0 &&
+			strncmp(c->original_dev->name, si->ipv6_iface, si->iface_length) == 0)
 		{
 			if (!sfe_ipv6_addr_equal(c->dest_ip, c->dest_ip_xlate))
 			{
@@ -1987,7 +1990,8 @@ static void sfe_ipv6_remove_connection(struct sfe_ipv6 *si, struct sfe_ipv6_conn
 			rx_bytes = c->original_match->rx_pack_stat_byte_count;
 			c->original_match->rx_pack_stat_byte_count = 0;
 		}
-		else if (strncmp(c->reply_dev->name, si->ipv6_iface, strlen(si->ipv6_iface) - 1) == 0)
+		else if (si->iface_length > 0 &&
+			strncmp(c->reply_dev->name, si->ipv6_iface, si->iface_length) == 0)
 		{
 			client_ip = c->src_ip[0];
 			IPC_DEBUG(
@@ -3752,13 +3756,15 @@ int sfe_ipv6_create_rule(struct sfe_connection_create *sic)
 	c->debug_read_seq = 0;
 	c->last_sync_jiffies = get_jiffies_64();
 
-	if (strncmp(dest_dev->name, si->ipv6_iface, strlen(si->ipv6_iface) - 1)== 0) {
+	if (si->iface_length > 0 &&
+		strncmp(dest_dev->name, si->ipv6_iface, si->iface_length) == 0) {
 		c->use_destMac = false;
 		original_cm->addEthMAC = false;
 		reply_cm->addEthMAC = true;
 		dest_dev_valid_for_pack_stats = true;
 	}
-	else if (strncmp(src_dev->name, si->ipv6_iface, strlen(si->ipv6_iface) - 1)== 0) {
+	else if (si->iface_length > 0 &&
+		strncmp(src_dev->name, si->ipv6_iface, si->iface_length) == 0) {
 		c->use_destMac = false;
 		reply_cm->addEthMAC = false;
 		original_cm->addEthMAC = true;
