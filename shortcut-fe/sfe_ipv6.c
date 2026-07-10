@@ -3377,7 +3377,6 @@ int sfe_l2tp_ipv6_recv(
 		CISCO_HDLC_SIZE +
 		INNER_L2TP_ETH_HDR_SIZE);
 
-	dev_put(dev);
 	ret = sfe_ipv4_recv(skb->dev, skb, pt_prev);
 
 	if (ret != 0)
@@ -3444,7 +3443,6 @@ int sfe_l2tp_ipv6_udp_recv(
 		UDP_HDR_SIZE  +
 		INNER_L2TP_ETH_HDR_SIZE);
 
-	dev_put(dev);
 	ret = sfe_ipv4_recv(skb->dev, skb, pt_prev);
 
 	if (ret != 0)
