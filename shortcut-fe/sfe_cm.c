@@ -1068,6 +1068,7 @@ int sfe_cm_device_event(struct notifier_block *this, unsigned long event, void *
 
 	switch (event) {
 	case NETDEV_DOWN:
+	case NETDEV_UNREGISTER:
 		if (dev) {
 			sfe_ipv4_destroy_all_rules_for_dev(dev);
 			sfe_ipv6_destroy_all_rules_for_dev(dev);
