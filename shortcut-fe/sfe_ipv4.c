@@ -947,7 +947,7 @@ static bool sfe_ipv4_packet_stats_read_connections_connection(struct sfe_ipv4 *s
 		return true;
 	}
 
-	if (si->iface_length > 0 &&
+	if (si->iface_length > 0 && c->original_dev &&
 		strncmp(c->original_dev->name, si->ipv4_iface, si->iface_length) == 0)
 	{
 		src_dev_valid_for_pack_stats = true;
@@ -960,7 +960,7 @@ static bool sfe_ipv4_packet_stats_read_connections_connection(struct sfe_ipv4 *s
 			client_ip = c->dest_ip;
 		}
 	}
-	else if (si->iface_length > 0 &&
+	else if (si->iface_length > 0 && c->reply_dev &&
 		strncmp(c->reply_dev->name, si->ipv4_iface, si->iface_length) == 0)
 	{
 		dest_dev_valid_for_pack_stats = true;
@@ -1810,7 +1810,7 @@ static void sfe_ipv4_remove_sfe_ipv4_connection(struct sfe_ipv4 *si, struct sfe_
 	/*
 	 * Remove the connection match objects.
 	 */
-	if (packet_stats_enabled)
+	if (packet_stats_enabled && c->original_dev && c->reply_dev)
 	{
 		DEBUG_INFO_LOW("removing connection ipv4\n");
 
@@ -3438,6 +3438,10 @@ int sfe_ipv4_create_rule(struct sfe_connection_create *sic)
 	if (unlikely((dest_dev->reg_state != NETREG_REGISTERED) ||
 				(src_dev->reg_state != NETREG_REGISTERED))) {
 		return -EINVAL;
+	}
+
+	if (unlikely(!(src_dev->flags & IFF_UP) || !(dest_dev->flags & IFF_UP))) {
+		return -ENETDOWN;
 	}
 
 	spin_lock_bh(&si->lock);
