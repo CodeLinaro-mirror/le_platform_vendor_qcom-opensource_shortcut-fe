@@ -516,11 +516,13 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 
 	/*
 	 * Look up the details of our connection in conntrack.
-	 *
+	 * Use kzalloc to ensure all fields (including l2tp_traffic,
+	 * sfe_config_array, parent_dev, flags, etc.) are zero-initialised.
+	 * kmalloc leaves garbage that can corrupt the connection match
 	 * Note that the data we get from conntrack is for the "ORIGINAL" direction
 	 * but our packet may actually be in the "REPLY" direction.
 	 */
-	sic = (struct sfe_connection_create *)kmalloc(sizeof(struct sfe_connection_create), GFP_KERNEL);
+	sic = (struct sfe_connection_create *)kzalloc(sizeof(struct sfe_connection_create), GFP_KERNEL);
 	if (sic == NULL)
 	{
 		DEBUG_TRACE("Cannot allocate memory for sic\n");
@@ -753,6 +755,15 @@ static unsigned int sfe_cm_post_routing(struct sk_buff *skb, int is_v4)
 			&sfe_l2tp_session_arr,
 			sizeof(sic->sfe_config_array));
 		sic->l2tp_traffic = l2tp_traffic;
+		sic->parent_dev = NULL;
+	} else {
+		/*
+		 * Explicitly mark this connection as non-L2TP.
+		 * Even though kzalloc already zeroes these fields, being
+		 * explicit here documents the intent and prevents future
+		 * regressions if the allocation strategy changes.
+		 */
+		sic->l2tp_traffic = false;
 		sic->parent_dev = NULL;
 	}
 #endif
